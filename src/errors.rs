@@ -1,0 +1,47 @@
+///
+///
+///
+
+pub type FreightResult = Result<(), FreighterError>;
+
+#[derive(Debug)]
+pub struct FreighterError {
+    pub error: Option<anyhow::Error>,
+    pub code: i32,
+}
+
+/// The Freighter error is the error type used at Freight's CLI and others.
+impl FreighterError {
+    pub fn new(error: anyhow::Error, code: i32) -> FreighterError {
+        FreighterError {
+            error: Some(error),
+            code,
+        }
+    }
+
+    pub fn code(code: i32) -> FreighterError {
+        FreighterError {
+            error: None,
+            code,
+        }
+    }
+}
+
+impl From<anyhow::Error> for FreighterError {
+    fn from(err: anyhow::Error) -> FreighterError {
+        FreighterError::new(err, 101)
+    }
+}
+
+impl From<clap::Error> for FreighterError {
+    fn from(err: clap::Error) -> FreighterError {
+        let code = if err.use_stderr() { 1 } else { 0 };
+        FreighterError::new(err.into(), code)
+    }
+}
+
+impl From<std::io::Error> for FreighterError {
+    fn from(err: std::io::Error) -> FreighterError {
+        FreighterError::new(err.into(), 1)
+    }
+}

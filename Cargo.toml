@@ -1,0 +1,24 @@
+[package]
+name = "freighter"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+homepage = ""
+repository = "https://github.com/open-rust-Initiative/freighter"
+documentation = ""
+readme = "README.md"
+description = """
+
+"""
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.63"
+thiserror = "1.0.30"
+clap = "3.2.19"
+
+[dev-dependencies]
+
+
+[build-dependencies]

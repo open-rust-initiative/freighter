@@ -1,9 +1,13 @@
 ///
 ///
 ///
+///
+///
+///
 
 pub type FreightResult = Result<(), FreighterError>;
 
+///
 #[derive(Debug)]
 pub struct FreighterError {
     pub error: Option<anyhow::Error>,
@@ -25,14 +29,20 @@ impl FreighterError {
             code,
         }
     }
+
+    pub fn print(&self) {
+        println!("{}", self.error.as_ref().unwrap());
+    }
 }
 
+///
 impl From<anyhow::Error> for FreighterError {
     fn from(err: anyhow::Error) -> FreighterError {
         FreighterError::new(err, 101)
     }
 }
 
+///
 impl From<clap::Error> for FreighterError {
     fn from(err: clap::Error) -> FreighterError {
         let code = if err.use_stderr() { 1 } else { 0 };
@@ -40,6 +50,7 @@ impl From<clap::Error> for FreighterError {
     }
 }
 
+///
 impl From<std::io::Error> for FreighterError {
     fn from(err: std::io::Error) -> FreighterError {
         FreighterError::new(err.into(), 1)

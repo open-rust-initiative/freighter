@@ -1,23 +1,76 @@
-///
-///
-///
-///
-///
+//!
+//!
+//!
+//!
+//!
 
+use anyhow::Error;
+use clap::ArgMatches;
 
+use crate::commands;
 use crate::config::Config;
-use crate::errors::FreightResult;
+use crate::errors::{FreighterError, FreightResult};
+
+///
+///
+///
+///
+///
+
 
 pub type App = clap::Command<'static>;
 
+///
+///
 pub fn main(_config: &mut Config) -> FreightResult {
-    println!("Hello, world!");
+    let mut config = Config::new();
 
-    Ok(())
+    let args = cli().try_get_matches()?;
+    let cmd = args.subcommand_name().unwrap();
+
+    execute_subcommand(&mut config, cmd, &args)
 }
 
+///
+///
 fn cli() -> App {
+    let usage = "freight [SUBCOMMAND]";
+
     App::new("freight")
         .version("0.1.0")
+        .disable_colored_help(true)
+        .disable_help_subcommand(true)
+        .override_usage(usage)
         .author("Open Rust Initiative")
+        .help_template(
+            "\
+Freight - A crate registry from the Open Rust Initiative Community
+
+USAGE:
+    {usage}
+
+Some common freight commands are (see all commands with --list):
+    sync    Sync the index and crate files from the upstream to local, cloud or registry
+
+See 'freight help <command>' for more information on a specific command.\n"
+        )
+        .subcommands(commands::builtin())
+}
+
+
+///
+///
+pub fn execute_subcommand(config: &mut Config, cmd: &str, args: &ArgMatches) -> FreightResult {
+    let f = match cmd {
+        "sync" => commands::sync::exec(config, args),
+       _ => {
+            let err = FreighterError::new(
+                anyhow::anyhow!("Unknown subcommand: {}", cmd),
+                1,
+            );
+            return Err(err);
+        }
+    };
+
+    f
 }

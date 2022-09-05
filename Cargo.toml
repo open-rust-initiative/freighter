@@ -17,6 +17,8 @@ description = """
 anyhow = "1.0.63"
 thiserror = "1.0.30"
 clap = "3.2.19"
+git2 = "0.15.0"
+url = "2.2.2"
 
 [dev-dependencies]
 

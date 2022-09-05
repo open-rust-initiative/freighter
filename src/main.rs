@@ -8,6 +8,7 @@ mod cli;
 mod config;
 mod errors;
 mod commands;
+mod crates;
 
 fn main() {
     let mut config = config::Config::new();

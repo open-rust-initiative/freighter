@@ -5,6 +5,8 @@
 ///
 ///
 
+use git2;
+
 pub type FreightResult = Result<(), FreighterError>;
 
 ///
@@ -53,6 +55,13 @@ impl From<clap::Error> for FreighterError {
 ///
 impl From<std::io::Error> for FreighterError {
     fn from(err: std::io::Error) -> FreighterError {
+        FreighterError::new(err.into(), 1)
+    }
+}
+
+///
+impl From<git2::Error> for FreighterError {
+    fn from(err: git2::Error) -> FreighterError {
         FreighterError::new(err.into(), 1)
     }
 }

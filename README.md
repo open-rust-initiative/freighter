@@ -22,6 +22,22 @@ Usually, you don't need to host your own crate registry. When we are developing 
 
 ### How to contribute?
 
+This project enforce the [DCO](https://developercertificate.org).
+
+Contributors sign-off that they adhere to these requirements by adding a Signed-off-by line to commit messages.
+
+```bash
+This is my commit message
+
+Signed-off-by: Random J Developer <random@developer.example.org>
+```
+
+Git even has a -s command line option to append this automatically to your commit message:
+
+```bash
+$ git commit -s -m 'This is my commit message'
+```
+
 ### License
 
 Freighter is licensed under this Licensed:

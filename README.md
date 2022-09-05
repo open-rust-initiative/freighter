@@ -14,7 +14,7 @@ Usually, you don't need to host your own crate registry. When we are developing 
 
 1. Support sync crates index from crates.io.
 2. Support cache crates file from crates.io.
-3. Support upload crates to the registry.
+3. Support publish crates to the registry.
 
 ### How to build?
 

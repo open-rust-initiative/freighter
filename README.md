@@ -24,6 +24,9 @@ Usually, you don't need to host your own crate registry. When we are developing 
 
 ### License
 
-Freighter is licensed under the [MIT](LICENSE) license.
+Freighter is licensed under this Licensed:
+
+* MIT LICENSE ( [LICESE-MIT](LICENSE-MIT) or https://opensource.org/licenses/MIT) 
+* Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or https://www.apache.org/licenses/LICENSE-2.0)
 
 ### Acknowledgements

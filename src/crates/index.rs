@@ -182,10 +182,7 @@ impl CrateIndex {
                 }
             });
 
-        let mut i = 0;
-
         for c in urls {
-            i += 1;
             let (url, file) = c;
 
             thread::sleep(std::time::Duration::new(5, 0));
@@ -193,10 +190,6 @@ impl CrateIndex {
             let mut resp = reqwest::blocking::get(url).unwrap();
             let mut out = File::create(file).unwrap();
             io::copy(&mut resp, &mut out).unwrap();
-
-            if i > 30 {
-                break;
-            }
         }
 
         Ok(())

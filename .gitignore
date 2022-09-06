@@ -22,4 +22,6 @@ Cargo.lock
 #
 # already existing elements were commented out
 
-#/target
+# crates.io index and crates
+data/tests/fixtures/crates-io-index
+data/tests/fixtures/crates/*.crate

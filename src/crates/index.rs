@@ -38,6 +38,15 @@ pub struct State {
     pub newline: bool,
 }
 
+impl Default for CrateIndex {
+    fn default() -> CrateIndex {
+        CrateIndex{
+            url: Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(),
+            path: PathBuf::from("data/tests/fixtures/crates-io-index")
+        }
+    }
+}
+
 ///
 ///
 impl CrateIndex {

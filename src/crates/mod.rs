@@ -5,4 +5,4 @@
 //!
 //!
 
-mod index;
+pub mod index;

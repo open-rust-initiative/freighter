@@ -8,7 +8,7 @@ use clap::ArgMatches;
 
 use crate::config::Config;
 use crate::errors::FreightResult;
-
+use crate::crates::index::CrateIndex;
 
 ///
 pub fn cli() -> clap::Command<'static> {
@@ -26,7 +26,9 @@ storage services, or other registries.
 
 ///
 pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
-    println!("sync");
+    println!("start sync...");
+    let mut index = CrateIndex::default();
+    index.clone().unwrap();
 
     Ok(())
 }

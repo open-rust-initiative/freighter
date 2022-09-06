@@ -4,7 +4,6 @@
 //!
 //!
 
-use anyhow::Error;
 use clap::ArgMatches;
 
 use crate::commands;
@@ -16,7 +15,6 @@ use crate::errors::{FreighterError, FreightResult};
 ///
 ///
 ///
-
 
 pub type App = clap::Command<'static>;
 

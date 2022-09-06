@@ -25,13 +25,6 @@ impl FreighterError {
         }
     }
 
-    pub fn code(code: i32) -> FreighterError {
-        FreighterError {
-            error: None,
-            code,
-        }
-    }
-
     pub fn print(&self) {
         println!("{}", self.error.as_ref().unwrap());
     }
@@ -62,6 +55,13 @@ impl From<std::io::Error> for FreighterError {
 ///
 impl From<git2::Error> for FreighterError {
     fn from(err: git2::Error) -> FreighterError {
+        FreighterError::new(err.into(), 1)
+    }
+}
+
+///
+impl From<walkdir::Error> for FreighterError {
+    fn from(err: walkdir::Error) -> FreighterError {
         FreighterError::new(err.into(), 1)
     }
 }

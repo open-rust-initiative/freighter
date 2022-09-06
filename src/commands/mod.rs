@@ -8,7 +8,7 @@ use clap::ArgMatches;
 
 use crate::cli::App;
 use crate::config::Config;
-use crate::errors::{FreighterError, FreightResult};
+use crate::errors::FreightResult;
 
 pub(crate) mod sync;
 

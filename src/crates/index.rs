@@ -1,10 +1,12 @@
 ///
 ///
+/// ### References Codes
 ///
-/// Some codes are from [git2-rs](https://github.com/rust-lang/git2-rs)'s clone (example)[https://github.com/rust-lang/git2-rs/blob/master/examples/clone.rs].
+/// - [git2-rs](https://github.com/rust-lang/git2-rs)'s clone (example)[https://github.com/rust-lang/git2-rs/blob/master/examples/clone.rs].
+/// - [crates.io](https://github.com/rust-lang/crates.io)'s [structs](https://github.com/rust-lang/crates.io/blob/master/cargo-registry-index/lib.rs)
 ///
 /// TODO
-/// - [ ] 1. Link the [CrateIndex] with [sync] subcommand
+/// - [ ] 1. Link the `CrateIndex` with `sync` subcommand
 /// - [ ] 2. Add https://github.com/rust-lang/crates.io-index.git as default url value
 /// - [ ] 3. Add check the destination path is empty
 /// - [ ] 4. Add check the destination path is a git repository
@@ -15,20 +17,30 @@
 
 use git2::build::{CheckoutBuilder, RepoBuilder};
 use git2::{FetchOptions, Progress, RemoteCallbacks};
-use std::cell::RefCell;
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
 use url::Url;
+use walkdir::{DirEntry, WalkDir};
+use serde::{Deserialize, Serialize};
+
+use std::collections::BTreeMap;
+use std::cell::RefCell;
+use std::fs::File;
+use std::io::{self, BufReader, BufRead, Write};
+use std::path::{Path, PathBuf};
+use std::thread;
 
 use crate::errors::FreightResult;
 
 /// `CrateIndex` is a wrapper `Git Repository` that crates-io index.
+///
+///
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CrateIndex {
     pub url: Url,
     pub path: PathBuf,
 }
 
+///
+///
 ///
 pub struct State {
     pub progress: Option<Progress<'static>>,
@@ -38,15 +50,53 @@ pub struct State {
     pub newline: bool,
 }
 
-impl Default for CrateIndex {
-    fn default() -> CrateIndex {
-        CrateIndex{
-            url: Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(),
-            path: PathBuf::from("data/tests/fixtures/crates-io-index")
-        }
-    }
+///
+///
+///
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Crate {
+    pub name: String,
+    pub vers: String,
+    pub deps: Vec<Dependency>,
+    pub cksum: String,
+    pub features: BTreeMap<String, Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub features2: Option<BTreeMap<String, Vec<String>>>,
+    pub yanked: Option<bool>,
+    #[serde(default)]
+    pub links: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub v: Option<u32>,
 }
 
+///
+///
+///
+#[derive(Serialize, Deserialize, Debug, PartialEq, PartialOrd, Ord, Eq)]
+pub struct Dependency {
+    pub name: String,
+    pub req: String,
+    pub features: Vec<String>,
+    pub optional: bool,
+    pub default_features: bool,
+    pub target: Option<String>,
+    pub kind: Option<DependencyKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package: Option<String>,
+}
+
+///
+///
+///
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, PartialOrd, Ord, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DependencyKind {
+    Normal,
+    Build,
+    Dev,
+}
+
+///
 ///
 ///
 impl CrateIndex {
@@ -55,17 +105,14 @@ impl CrateIndex {
         Self { url, path}
     }
 
-    /// Get the `url` of this `CrateIndex`.
-    pub fn url(&self) -> &Url {
-        &self.url
-    }
-
     /// Get the `path` of this `CrateIndex`.
     pub fn path(&self) -> &Path {
         &self.path
     }
 
     /// Clone the `CrateIndex` to a local directory.
+    ///
+    ///
     pub fn clone(&self) -> FreightResult {
         let state = RefCell::new(State {
             progress: None,
@@ -102,8 +149,70 @@ impl CrateIndex {
 
         Ok(())
     }
+
+    /// https://github.com/rust-lang/crates.io-index/blob/master/.github/workflows/update-dl-url.yml
+    ///
+    /// ```YAML
+    ///env:
+    ///   URL_api: "https://crates.io/api/v1/crates"
+    ///   URL_cdn: "https://static.crates.io/crates/{crate}/{crate}-{version}.crate"
+    ///   URL_s3_primary: "https://crates-io.s3-us-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
+    ///   URL_s3_fallback: "https://crates-io-fallback.s3-eu-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
+    /// ```
+    pub fn downloads(&self, path: PathBuf) -> FreightResult {
+        let mut urls = Vec::new();
+
+        WalkDir::new(self.path()).into_iter()
+            .filter_entry(|e| is_not_hidden(e))
+            .filter_map(|v| v.ok())
+            .for_each(|x| {
+                if x.file_type().is_file() && x.path().extension().unwrap_or_default() != "json" {
+                    let input = File::open(x.path()).unwrap();
+                    let buffered = BufReader::new(input);
+
+                    for line in buffered.lines() {
+                        let line = line.unwrap();
+                        let c: Crate = serde_json::from_str(&line).unwrap();
+
+                        let url = format!("https://static.crates.io/crates/{}/{}-{}.crate", c.name,c.name, c.vers);
+                        let file = path.join(format!("{}-{}.crate", c.name, c.vers));
+
+                        urls.push((url, file.to_str().unwrap().to_string()));
+                    }
+                }
+            });
+
+        let mut i = 0;
+
+        for c in urls {
+            i += 1;
+            let (url, file) = c;
+
+            thread::sleep(std::time::Duration::new(5, 0));
+
+            let mut resp = reqwest::blocking::get(url).unwrap();
+            let mut out = File::create(file).unwrap();
+            io::copy(&mut resp, &mut out).unwrap();
+
+            if i > 30 {
+                break;
+            }
+        }
+
+        Ok(())
+    }
 }
 
+///
+fn is_not_hidden(entry: &DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .map(|s| entry.depth() == 0 || !s.starts_with("."))
+        .unwrap_or(false)
+}
+
+///
 ///
 ///
 ///
@@ -163,12 +272,27 @@ mod tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("data/tests/fixtures/crates-io-index");
 
-        let mut index = super::CrateIndex::new(
+        let index = super::CrateIndex::new(
             url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(),
             path
         );
 
         index.clone().unwrap();
+    }
 
+    #[test]
+    fn test_downloads() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("data/tests/fixtures/crates-io-index");
+
+        let index = super::CrateIndex::new(
+            url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(),
+            path
+        );
+
+        let mut crates = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        crates.push("data/tests/fixtures/crates");
+
+        index.downloads(crates).unwrap();
     }
 }

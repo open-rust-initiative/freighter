@@ -6,8 +6,11 @@
 
 use clap::ArgMatches;
 
+use std::path::{Path, PathBuf};
+
 use crate::config::Config;
 use crate::errors::FreightResult;
+use crate::crates::index::CrateIndex;
 
 ///
 pub fn cli() -> clap::Command<'static> {

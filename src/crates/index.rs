@@ -20,6 +20,7 @@ use git2::{FetchOptions, Progress, RemoteCallbacks};
 use url::Url;
 use walkdir::{DirEntry, WalkDir};
 use serde::{Deserialize, Serialize};
+use rand::Rng;
 
 use std::collections::BTreeMap;
 use std::cell::RefCell;
@@ -27,6 +28,7 @@ use std::fs::File;
 use std::io::{self, BufReader, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::thread;
+use std::time::Duration;
 
 use crate::errors::FreightResult;
 
@@ -101,7 +103,7 @@ pub enum DependencyKind {
 ///
 impl CrateIndex {
     /// Create a new `CrateIndex` from a `Url`.
-    pub fn new(url: Url, path: PathBuf) -> Self {
+    pub fn new(url: Url, path: PathBuf, buf: PathBuf) -> Self {
         Self { url, path}
     }
 
@@ -182,14 +184,26 @@ impl CrateIndex {
                 }
             });
 
+        let mut i = 0;
         for c in urls {
             let (url, file) = c;
 
-            thread::sleep(std::time::Duration::new(5, 0));
+            // https://github.com/RustScan/RustScan/wiki/Thread-main-paniced-at-too-many-open-files
+            //
+            if i % 10 == 0 {
+                let mut rng = rand::thread_rng();
+                thread::sleep(Duration::from_secs(rng.gen_range(3..8)));
+            }
 
-            let mut resp = reqwest::blocking::get(url).unwrap();
-            let mut out = File::create(file).unwrap();
-            io::copy(&mut resp, &mut out).unwrap();
+
+            thread::spawn(move || {
+                let mut resp = reqwest::blocking::get(url).unwrap();
+                let mut out = File::create(file).unwrap();
+                io::copy(&mut resp, &mut out).unwrap();
+                println!("{}", i);
+            });
+
+            i += 1;
         }
 
         Ok(())
@@ -265,12 +279,9 @@ mod tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("data/tests/fixtures/crates-io-index");
 
-        let index = super::CrateIndex::new(
-            url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(),
-            path
-        );
+        let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path, Default::default());
 
-        index.clone().unwrap();
+        // index.clone().unwrap();
     }
 
     #[test]
@@ -278,14 +289,11 @@ mod tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("data/tests/fixtures/crates-io-index");
 
-        let index = super::CrateIndex::new(
-            url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(),
-            path
-        );
+        let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path, Default::default());
 
         let mut crates = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         crates.push("data/tests/fixtures/crates");
 
-        // index.downloads(crates).unwrap();
+        //index.downloads(crates).unwrap();
     }
 }

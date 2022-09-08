@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 use crate::errors::FreightResult;
-use crate::crates::index::CrateIndex;
+use crate::crates::index::{CrateIndex, run};
 
 ///
 pub fn cli() -> clap::Command<'static> {
@@ -28,5 +28,10 @@ storage services, or other registries.
 
 ///
 pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
+    println!("start sync...");
+    let index = CrateIndex::default();
+    if let Err(e) = run(index) {
+        e.print();
+    }
     Ok(())
 }

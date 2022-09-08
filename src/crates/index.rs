@@ -30,8 +30,10 @@ use std::io::{self, BufReader, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::{fs, thread};
 use std::time::Duration;
+use std::{env, process};
 
-use crate::errors::FreightResult;
+use crate::errors::{FreighterError, FreightResult};
+use crate::crates::revparse;
 
 /// `CrateIndex` is a wrapper `Git Repository` that crates-io index.
 ///
@@ -51,6 +53,17 @@ pub struct State {
     pub current: usize,
     pub path: Option<PathBuf>,
     pub newline: bool,
+}
+
+impl Default for CrateIndex {
+    fn default() -> CrateIndex {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("data/tests/fixtures/crates-io-index");
+        CrateIndex{
+            url: Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(),
+            path: path,
+        }
+    }
 }
 
 ///
@@ -117,6 +130,7 @@ impl CrateIndex {
     ///
     ///
     pub fn clone(&self) -> FreightResult {
+        println!("Starting git clone...");
         let state = RefCell::new(State {
             progress: None,
             total: 0,
@@ -150,6 +164,11 @@ impl CrateIndex {
             .clone(self.url.as_ref(), self.path.as_path())?;
         println!();
 
+        Ok(())
+    }
+
+    pub fn pull(&self) -> FreightResult {
+        println!("Starting git pull...");
         Ok(())
     }
 
@@ -285,6 +304,40 @@ fn print(state: &mut State) {
     }
 
     io::stdout().flush().unwrap();
+}
+
+
+pub fn run(index: CrateIndex) -> FreightResult {
+    if exist_file(&index) {
+        if !is_git_path(&index) || !is_crates_path(&index) {
+        let err = FreighterError::new(
+            anyhow::anyhow!("Traget path is not a git or crates path: {}", index.path.into_os_string().into_string().unwrap()),
+            1,
+        );
+        return Err(err);
+        };
+        index.pull()?;
+    } else {
+        index.clone()?;
+    }
+    Ok(())
+}
+
+pub fn exist_file(index: &CrateIndex) -> bool {
+    Path::new(index.path.as_path()).exists()
+}
+
+pub fn is_git_path(index: &CrateIndex) -> bool {
+    if let Err(e) = revparse::run(index) {
+        e.print();
+        process::exit(1);
+    } else {
+        true
+    }
+}
+
+pub fn is_crates_path(_index: &CrateIndex) -> bool {
+    true
 }
 
 #[cfg(test)]

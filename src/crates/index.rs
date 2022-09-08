@@ -16,7 +16,8 @@
 /// - [ ] 8. Change the test index git repo with local git repository for test performance
 
 use git2::build::{CheckoutBuilder, RepoBuilder};
-use git2::{FetchOptions, Progress, RemoteCallbacks};
+use git2::{FetchOptions, Progress, RemoteCallbacks, Repository};
+
 use url::Url;
 use walkdir::{DirEntry, WalkDir};
 use serde::{Deserialize, Serialize};
@@ -32,7 +33,7 @@ use std::time::Duration;
 use std::{env, process};
 
 use crate::errors::{FreighterError, FreightResult};
-use crate::crates::revparse;
+use crate::crates::{pull};
 
 /// `CrateIndex` is a wrapper `Git Repository` that crates-io index.
 ///
@@ -54,12 +55,16 @@ pub struct State {
     pub newline: bool,
 }
 
+impl CrateIndex {
+    pub const CRATE_REGISTRY: [&'static str; 3] = ["https://github.com/rust-lang/crates.io-index.git","",""];
+}
+
 impl Default for CrateIndex {
     fn default() -> CrateIndex {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("data/tests/fixtures/crates-io-index");
         CrateIndex{
-            url: Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(),
+            url: Url::parse(CrateIndex::CRATE_REGISTRY[0]).unwrap(),
             path: path,
         }
     }
@@ -163,11 +168,6 @@ impl CrateIndex {
             .clone(self.url.as_ref(), self.path.as_path())?;
         println!();
 
-        Ok(())
-    }
-
-    pub fn pull(&self) -> FreightResult {
-        println!("Starting git pull...");
         Ok(())
     }
 
@@ -292,14 +292,9 @@ fn print(state: &mut State) {
 
 pub fn run(index: CrateIndex) -> FreightResult {
     if exist_file(&index) {
-        if !is_git_path(&index) || !is_crates_path(&index) {
-        let err = FreighterError::new(
-            anyhow::anyhow!("Traget path is not a git or crates path: {}", index.path.into_os_string().into_string().unwrap()),
-            1,
-        );
-        return Err(err);
-        };
-        index.pull()?;
+        if let Err(e) = git_dir_check(&index) {
+            e.print();
+        }
     } else {
         index.clone()?;
     }
@@ -310,17 +305,22 @@ pub fn exist_file(index: &CrateIndex) -> bool {
     Path::new(index.path.as_path()).exists()
 }
 
-pub fn is_git_path(index: &CrateIndex) -> bool {
-    if let Err(e) = revparse::run(index) {
-        e.print();
-        process::exit(1);
-    } else {
-        true
-    }
-}
+pub fn git_dir_check(index: &CrateIndex) -> FreightResult {
+    let path = index.path.to_str().map(|s| &s[..]).unwrap_or(".");
+    let repo = match Repository::open(path) {
+        Ok(repo) => repo,
+        Err(e) => panic!("Traget path is not a git repository: {}", e),
+    };
+    let remote_name = &String::from("origin");
+    let mut remote = repo.find_remote(remote_name).unwrap();
+    let url = remote.url().unwrap(); 
+    println!("current remote registry is: {}", url);
+    if CrateIndex::CRATE_REGISTRY.contains(&url) {
 
-pub fn is_crates_path(_index: &CrateIndex) -> bool {
-    true
+        pull::run(&repo, &mut remote)
+    } else {
+        panic!("Traget url is not a crates index: {}", url)
+    }
 }
 
 #[cfg(test)]

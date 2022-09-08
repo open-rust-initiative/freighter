@@ -21,13 +21,14 @@ use url::Url;
 use walkdir::{DirEntry, WalkDir};
 use serde::{Deserialize, Serialize};
 use rand::Rng;
+use sha2::{Digest, Sha256};
 
 use std::collections::BTreeMap;
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::{self, BufReader, BufRead, Write};
 use std::path::{Path, PathBuf};
-use std::thread;
+use std::{fs, thread};
 use std::time::Duration;
 
 use crate::errors::FreightResult;
@@ -179,28 +180,44 @@ impl CrateIndex {
                         let url = format!("https://static.crates.io/crates/{}/{}-{}.crate", c.name,c.name, c.vers);
                         let file = path.join(format!("{}-{}.crate", c.name, c.vers));
 
-                        urls.push((url, file.to_str().unwrap().to_string()));
+                        urls.push((url, file.to_str().unwrap().to_string(), c.cksum));
                     }
                 }
             });
 
         let mut i = 0;
         for c in urls {
-            let (url, file) = c;
+            let (url, file, cksum) = c;
 
             // https://github.com/RustScan/RustScan/wiki/Thread-main-paniced-at-too-many-open-files
-            //
-            if i % 10 == 0 {
+            if i % 40 == 0 {
                 let mut rng = rand::thread_rng();
                 thread::sleep(Duration::from_secs(rng.gen_range(3..8)));
             }
 
-
             thread::spawn(move || {
+                let p = Path::new(&file);
+
+                if p.is_file() == true && p.exists() == true {
+                    let mut hasher = Sha256::new();
+                    let mut f = File::open(p).unwrap();
+                    io::copy(&mut f, &mut hasher).unwrap();
+                    let result = hasher.finalize();
+                    let hex = format!("{:x}", result);
+
+                    if hex == cksum {
+                        return;
+                    } else {
+                        println!("The file {} SHA256 value \"{}\" is wrong, will remove and download again!", file, hex);
+                        fs::remove_file(p).unwrap();
+                    }
+                }
+
                 let mut resp = reqwest::blocking::get(url).unwrap();
                 let mut out = File::create(file).unwrap();
                 io::copy(&mut resp, &mut out).unwrap();
-                println!("{}", i);
+
+                println!("Downloaded {:?}", out.metadata());
             });
 
             i += 1;

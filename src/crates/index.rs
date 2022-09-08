@@ -209,9 +209,9 @@ impl CrateIndex {
             let (url, file, cksum) = c;
 
             // https://github.com/RustScan/RustScan/wiki/Thread-main-paniced-at-too-many-open-files
-            if i % 40 == 0 {
+            if i % 60 == 0 {
                 let mut rng = rand::thread_rng();
-                thread::sleep(Duration::from_secs(rng.gen_range(3..8)));
+                thread::sleep(Duration::from_secs(rng.gen_range(1..5)));
             }
 
             thread::spawn(move || {
@@ -225,18 +225,25 @@ impl CrateIndex {
                     let hex = format!("{:x}", result);
 
                     if hex == cksum {
-                        return;
+                        println!("Already downloaded: {:?}", p);
                     } else {
                         println!("The file {} SHA256 value \"{}\" is wrong, will remove and download again!", file, hex);
                         fs::remove_file(p).unwrap();
+
+                        let mut resp = reqwest::blocking::get(url).unwrap();
+                        let mut out = File::create(file).unwrap();
+                        io::copy(&mut resp, &mut out).unwrap();
+
+                        println!("Remove and new downloaded: {:?}", out);
                     }
+                } else {
+                    let mut resp = reqwest::blocking::get(url).unwrap();
+                    let mut out = File::create(file).unwrap();
+                    io::copy(&mut resp, &mut out).unwrap();
+
+                    println!("New downloaded: {:?}", out);
                 }
 
-                let mut resp = reqwest::blocking::get(url).unwrap();
-                let mut out = File::create(file).unwrap();
-                io::copy(&mut resp, &mut out).unwrap();
-
-                println!("Downloaded {:?}", out.metadata());
             });
 
             i += 1;
@@ -347,7 +354,7 @@ mod tests {
     #[test]
     fn test_clone() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("data/tests/fixtures/crates-io-index");
+        path.push("data/tests/fixtures/crates.io-index");
 
         let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path, Default::default());
 
@@ -357,13 +364,13 @@ mod tests {
     #[test]
     fn test_downloads() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("data/tests/fixtures/crates-io-index");
+        path.push("data/tests/fixtures/crates.io-index");
 
         let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path, Default::default());
 
         let mut crates = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         crates.push("data/tests/fixtures/crates");
 
-        //index.downloads(crates).unwrap();
+        // index.downloads(crates).unwrap();
     }
 }

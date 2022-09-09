@@ -9,13 +9,14 @@ use std::io::{self, Write};
 use std::str;
 
 use crate::errors::FreightResult;
-
+use crate::crates::index::SyncOptions;
 
 
 fn do_fetch<'a>(
     repo: &'a git2::Repository,
     refs: &[&str],
     remote: &'a mut git2::Remote,
+    opts:& SyncOptions,
 ) -> Result<git2::AnnotatedCommit<'a>, git2::Error> {
     let mut cb = git2::RemoteCallbacks::new();
 
@@ -41,7 +42,11 @@ fn do_fetch<'a>(
     });
 
     let mut fo = git2::FetchOptions::new();
-    fo.remote_callbacks(cb);
+
+    if !opts.no_processbar {
+        fo.remote_callbacks(cb);
+    }
+
     // Always fetch all tags.
     // Perform a download and also update tips
     fo.download_tags(git2::AutotagOption::All);
@@ -178,9 +183,12 @@ fn do_merge<'a>(
     }
     Ok(())
 }
-pub fn run(repo: &Repository, remote: &mut Remote) -> FreightResult {
+
+pub fn run(repo: &Repository, opts: &SyncOptions) -> FreightResult {
     let remote_branch = &String::from("master");
-    let fetch_commit = do_fetch(repo, &[remote_branch], remote)?;
+    let remote_name = &String::from("origin");
+    let mut remote = repo.find_remote(remote_name).unwrap();
+    let fetch_commit = do_fetch(repo, &[remote_branch], &mut remote, opts)?;
     do_merge(&repo, &remote_branch, fetch_commit)
 }
 

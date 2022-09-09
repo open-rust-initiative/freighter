@@ -33,10 +33,10 @@ use std::io::{self, BufReader, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::{fs, thread};
 use std::time::Duration;
-use std::{env, process};
+use std::env;
 
-use crate::errors::{FreighterError, FreightResult};
-use crate::crates::{pull};
+use crate::errors::FreightResult;
+use crate::crates::pull;
 
 /// `CrateIndex` is a wrapper `Git Repository` that crates-io index.
 ///
@@ -56,6 +56,10 @@ pub struct State {
     pub current: usize,
     pub path: Option<PathBuf>,
     pub newline: bool,
+}
+
+pub struct SyncOptions {
+    pub no_processbar: bool
 }
 
 impl CrateIndex {
@@ -136,7 +140,7 @@ impl CrateIndex {
     /// Clone the `CrateIndex` to a local directory.
     ///
     ///
-    pub fn clone(&self) -> FreightResult {
+    pub fn clone(&self, opts: &mut SyncOptions) -> FreightResult {
         println!("Starting git clone...");
         let state = RefCell::new(State {
             progress: None,
@@ -150,7 +154,9 @@ impl CrateIndex {
         cb.transfer_progress(|stats| {
             let mut state = state.borrow_mut();
             state.progress = Some(stats.to_owned());
-            print(&mut *state);
+            if !opts.no_processbar {
+                print(&mut *state);
+            }
             true
         });
 
@@ -160,7 +166,9 @@ impl CrateIndex {
             state.path = path.map(|p| p.to_path_buf());
             state.current = cur;
             state.total = total;
-            print(&mut *state);
+            if !opts.no_processbar {
+                print(&mut *state);
+            }
         });
 
         let mut fo = FetchOptions::new();
@@ -321,13 +329,21 @@ fn print(state: &mut State) {
 }
 
 
-pub fn run(index: CrateIndex) -> FreightResult {
+pub fn run(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
+    if opts.no_processbar {
+        println!("no-processbar has been set to true, no processbar will be displayed!");
+    }
     if exist_file(&index) {
-        if let Err(e) = git_dir_check(&index) {
-            e.print();
+        let path = index.path.to_str().map(|s| &s[..]).unwrap_or(".");
+        let repo = match Repository::open(path) {
+            Ok(repo) => repo,
+            Err(e) => panic!("Traget path is not a git repository: {}", e),
+        };
+        if cratesio_index_check(&repo) {
+            pull::run(&repo,  opts)?;
         }
     } else {
-        index.clone()?;
+        index.clone(opts)?;
     }
     Ok(())
 }
@@ -336,19 +352,13 @@ pub fn exist_file(index: &CrateIndex) -> bool {
     Path::new(index.path.as_path()).exists()
 }
 
-pub fn git_dir_check(index: &CrateIndex) -> FreightResult {
-    let path = index.path.to_str().map(|s| &s[..]).unwrap_or(".");
-    let repo = match Repository::open(path) {
-        Ok(repo) => repo,
-        Err(e) => panic!("Traget path is not a git repository: {}", e),
-    };
+pub fn cratesio_index_check(repo: &Repository) -> bool {
     let remote_name = &String::from("origin");
-    let mut remote = repo.find_remote(remote_name).unwrap();
+    let remote = repo.find_remote(remote_name).unwrap();
     let url = remote.url().unwrap(); 
     println!("current remote registry is: {}", url);
     if CrateIndex::CRATE_REGISTRY.contains(&url) {
-
-        pull::run(&repo, &mut remote)
+        true
     } else {
         panic!("Traget url is not a crates index: {}", url)
     }

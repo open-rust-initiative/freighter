@@ -24,9 +24,18 @@ pub fn main(_config: &mut Config) -> FreightResult {
     let mut config = Config::new();
 
     let args = cli().try_get_matches()?;
-    let cmd = args.subcommand_name().unwrap();
+    // let cmd = args.subcommand_name().unwrap();
 
-    execute_subcommand(&mut config, cmd, &args)
+    let (cmd, subcommand_args) = match args.subcommand() {
+        Some((cmda, args)) => (cmda, args),
+        _ => {
+            // No subcommand provided.
+            cli().print_help()?;
+            return Ok(());
+        }
+    };
+
+    execute_subcommand(&mut config, cmd, &subcommand_args)
 }
 
 ///

@@ -31,10 +31,10 @@ use std::io::{self, BufReader, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::{fs, thread};
 use std::time::Duration;
-use std::{env, process};
+use std::env;
 
-use crate::errors::{FreighterError, FreightResult};
-use crate::crates::{pull};
+use crate::errors::FreightResult;
+use crate::crates::pull;
 
 /// `CrateIndex` is a wrapper `Git Repository` that crates-io index.
 ///

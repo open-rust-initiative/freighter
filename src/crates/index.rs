@@ -22,6 +22,8 @@ use url::Url;
 use walkdir::{DirEntry, WalkDir};
 use serde::{Deserialize, Serialize};
 use rand::Rng;
+use rand::thread_rng;
+use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
 
 use std::collections::BTreeMap;
@@ -204,12 +206,15 @@ impl CrateIndex {
                 }
             });
 
+        let mut rng = thread_rng();
+        urls.shuffle(&mut rng);
+
         let mut i = 0;
         for c in urls {
             let (url, file, cksum) = c;
 
             // https://github.com/RustScan/RustScan/wiki/Thread-main-paniced-at-too-many-open-files
-            if i % 60 == 0 {
+            if i % 15 == 0 {
                 let mut rng = rand::thread_rng();
                 thread::sleep(Duration::from_secs(rng.gen_range(1..5)));
             }
@@ -225,23 +230,25 @@ impl CrateIndex {
                     let hex = format!("{:x}", result);
 
                     if hex == cksum {
-                        println!("Already downloaded: {:?}", p);
+                        println!("###[ALREADY] \t{:?}", f);
                     } else {
-                        println!("The file {} SHA256 value \"{}\" is wrong, will remove and download again!", file, hex);
+                        let p = Path::new(&file);
+
+                        println!("!!![REMOVE] \t\t {:?} !", f);
                         fs::remove_file(p).unwrap();
 
                         let mut resp = reqwest::blocking::get(url).unwrap();
-                        let mut out = File::create(file).unwrap();
+                        let mut out = File::create(p).unwrap();
                         io::copy(&mut resp, &mut out).unwrap();
 
-                        println!("Remove and new downloaded: {:?}", out);
+                        println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);
                     }
                 } else {
                     let mut resp = reqwest::blocking::get(url).unwrap();
                     let mut out = File::create(file).unwrap();
                     io::copy(&mut resp, &mut out).unwrap();
 
-                    println!("New downloaded: {:?}", out);
+                    println!("&&&[NEW] \t\t {:?}", out);
                 }
 
             });
@@ -371,6 +378,6 @@ mod tests {
         let mut crates = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         crates.push("data/tests/fixtures/crates");
 
-        // index.downloads(crates).unwrap();
+        index.downloads(crates).unwrap();
     }
 }

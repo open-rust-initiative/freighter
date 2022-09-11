@@ -222,7 +222,8 @@ impl CrateIndex {
             let (url, file, cksum) = c;
 
             // https://github.com/RustScan/RustScan/wiki/Thread-main-paniced-at-too-many-open-files
-            if i % 15 == 0 {
+            // 10,20,40,80,120,160,320
+            if i % 10 == 0 {
                 let mut rng = rand::thread_rng();
                 thread::sleep(Duration::from_secs(rng.gen_range(1..5)));
             }

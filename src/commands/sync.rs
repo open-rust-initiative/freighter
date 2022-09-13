@@ -18,11 +18,15 @@ pub fn cli() -> clap::Command<'static> {
     clap::Command::new("sync")
         .about("Sync the crates from the upstream(crates.io) to the local registry")
         .usage(usage)
-        .arg(flag("no-processbar", "Hide process bar when sync job start"))
+        .arg(flag("no-processbar", "Hide process bar when start sync"))
         .help_template(
             "\
 Sync the crates index and crate files from the upstream(crates.io) to the local filesystem, other cloud
 storage services, or other registries.
+
+OPTIONS:
+{options}
+
 \n")
 }
 

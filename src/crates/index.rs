@@ -47,7 +47,7 @@ pub struct CrateIndex {
     pub path: PathBuf,
 }
 
-///
+/// State contains the progress when download crates file
 ///
 ///
 pub struct State {
@@ -57,13 +57,14 @@ pub struct State {
     pub path: Option<PathBuf>,
     pub newline: bool,
 }
-
+/// SyncOptions preserve the sync subcommand config 
 pub struct SyncOptions {
     /// Whether to hide processbar when start sync.
     pub no_processbar: bool
 }
 
 impl CrateIndex {
+    /// default crate registry
     pub const CRATE_REGISTRY: [&'static str; 3] = ["https://github.com/rust-lang/crates.io-index.git","",""];
 }
 
@@ -78,7 +79,7 @@ impl Default for CrateIndex {
     }
 }
 
-///
+/// Crate preserve the crate file info 
 ///
 ///
 #[derive(Serialize, Deserialize, Debug)]
@@ -97,7 +98,7 @@ pub struct Crate {
     pub v: Option<u32>,
 }
 
-///
+/// Dependencies maintain relationships between crate
 ///
 ///
 #[derive(Serialize, Deserialize, Debug, PartialEq, PartialOrd, Ord, Eq)]
@@ -113,7 +114,7 @@ pub struct Dependency {
     pub package: Option<String>,
 }
 
-///
+/// DependencyKind represents which stage the current cependency is
 ///
 ///
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, PartialOrd, Ord, Eq)]
@@ -124,7 +125,7 @@ pub enum DependencyKind {
     Dev,
 }
 
-///
+/// CrateIndex impl provide several functions to for sync steps: like clone, pull, download 
 ///
 ///
 impl CrateIndex {
@@ -236,7 +237,7 @@ impl CrateIndex {
                             fs::create_dir_all(&folder).unwrap();
                         }
 
-                        urls.push((url, file.to_str().unwrap().to_string(), &c.cksum));
+                        urls.push((url, file.to_str().unwrap().to_string(), c.cksum));
                     }
                 }
             });
@@ -255,7 +256,7 @@ impl CrateIndex {
                 thread::sleep(Duration::from_secs(rng.gen_range(1..5)));
             }
 
-            thread::spawn(move || {
+            let handle = thread::spawn(move || {
                 let p = Path::new(&file);
 
                 if p.is_file() == true && p.exists() == true {
@@ -288,6 +289,7 @@ impl CrateIndex {
                 }
 
             });
+            handle.join().unwrap();
 
             i += 1;
         }
@@ -296,7 +298,7 @@ impl CrateIndex {
     }
 }
 
-///
+/// Check whether the directory is hidden
 fn is_not_hidden(entry: &DirEntry) -> bool {
     entry
         .file_name()
@@ -305,7 +307,7 @@ fn is_not_hidden(entry: &DirEntry) -> bool {
         .unwrap_or(false)
 }
 
-///
+/// Print processbar while clone data from git
 ///
 ///
 ///

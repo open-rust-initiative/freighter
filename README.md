@@ -4,13 +4,13 @@ Freighter is a simple crates registry that can be used to host your own private 
 
 ### Why?
 
-Usually, you don't need to host your own crate registry. When we are developing program using Rust in the company, we need to host our own crates registry for the following reasons:
+Usually, you don't need to host your own crate registry. When we are developing program using Rust in the company, we need to host private crates registry for the following reasons:
 
 1. We need to use some crates that are not published to crates.io, such as some internal crates.
 2. We need to use some crates that are published to crates.io, but we need to modify them to fit our needs.
 3. We need to use crates in our build system or CI/CD workflow.
 
-### What's features?
+### What's the major features?
 
 1. Support sync crates index from crates.io.
 2. Support cache crates file from crates.io.
@@ -42,7 +42,7 @@ $ git commit -s -m 'This is my commit message'
 
 Freighter is licensed under this Licensed:
 
-* MIT LICENSE ( [LICESE-MIT](LICENSE-MIT) or https://opensource.org/licenses/MIT) 
+* MIT LICENSE ( [LICENSE-MIT](LICENSE-MIT) or https://opensource.org/licenses/MIT) 
 * Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or https://www.apache.org/licenses/LICENSE-2.0)
 
 ### Acknowledgements

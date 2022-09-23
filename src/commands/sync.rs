@@ -18,7 +18,7 @@ pub fn cli() -> clap::Command<'static> {
     clap::Command::new("sync")
         .about("Sync the crates from the upstream(crates.io) to the local registry")
         .usage(usage)
-        .arg(flag("no-processbar", "Hide process bar when start sync"))
+        .arg(flag("no-progressbar", "Hide process bar when start sync"))
         .help_template(
             "\
 Sync the crates index and crate files from the upstream(crates.io) to the local filesystem, other cloud
@@ -32,12 +32,10 @@ OPTIONS:
 
 ///
 pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
-
-    println!("start sync...");
     let index = CrateIndex::default();
 
     run(index, &mut SyncOptions{
-        no_processbar: args.get_flag("no-processbar"),
+        no_processbar: args.get_flag("no-progressbar"),
     })?;
 
     Ok(())

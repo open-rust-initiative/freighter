@@ -361,7 +361,7 @@ fn print(state: &mut State) {
 /// If destination path is not empty, run pull instead of clone
 pub fn run(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
     if opts.no_processbar {
-        println!("no-processbar has been set to true, it will not be displayed!");
+        println!("no-progressbar has been set to true, it will not be displayed!");
     }
     if Path::new(index.path.as_path()).exists() {
         index.pull(opts)?;

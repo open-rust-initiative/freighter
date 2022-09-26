@@ -28,10 +28,10 @@ use sha2::{Digest, Sha256};
 
 use std::collections::BTreeMap;
 use std::cell::RefCell;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, BufReader, BufRead, Write};
 use std::path::{Path, PathBuf};
-use std::{fs, thread};
+use std::thread;
 use std::time::Duration;
 use std::env;
 use std::str;
@@ -59,8 +59,8 @@ pub struct State {
 }
 /// SyncOptions preserve the sync subcommand config 
 pub struct SyncOptions {
-    /// Whether to hide processbar when start sync.
-    pub no_processbar: bool
+    /// Whether to hide progressbar when start sync.
+    pub no_progressbar: bool
 }
 
 impl CrateIndex {
@@ -74,7 +74,7 @@ impl Default for CrateIndex {
         path.push("data/tests/fixtures/crates-io-index");
         CrateIndex{
             url: Url::parse(CrateIndex::CRATE_REGISTRY[0]).unwrap(),
-            path: path,
+            path,
         }
     }
 }
@@ -114,7 +114,7 @@ pub struct Dependency {
     pub package: Option<String>,
 }
 
-/// DependencyKind represents which stage the current cependency is
+/// DependencyKind represents which stage the current dependency is
 ///
 ///
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, PartialOrd, Ord, Eq)]
@@ -130,7 +130,7 @@ pub enum DependencyKind {
 ///
 impl CrateIndex {
     /// Create a new `CrateIndex` from a `Url`.
-    pub fn new(url: Url, path: PathBuf, buf: PathBuf) -> Self {
+    pub fn new(url: Url, path: PathBuf) -> Self {
         Self { url, path}
     }
 
@@ -147,7 +147,7 @@ impl CrateIndex {
             Err(e) => panic!("Target path is not a git repository: {}", e),
         };
         
-        if cratesio_index_check(&repo) {
+        if crates_io_index_check(&repo) {
             // use default branch master
             let remote_branch = &String::from("master");
             // use default name origin
@@ -177,7 +177,7 @@ impl CrateIndex {
         cb.transfer_progress(|stats| {
             let mut state = state.borrow_mut();
             state.progress = Some(stats.to_owned());
-            if !opts.no_processbar {
+            if !opts.no_progressbar {
                 print(&mut *state);
             }
             true
@@ -189,7 +189,7 @@ impl CrateIndex {
             state.path = path.map(|p| p.to_path_buf());
             state.current = cur;
             state.total = total;
-            if !opts.no_processbar {
+            if !opts.no_progressbar {
                 print(&mut *state);
             }
         });
@@ -205,6 +205,16 @@ impl CrateIndex {
         Ok(())
     }
 
+
+    /// Check whether the directory is hidden
+    pub fn is_not_hidden(&self, entry: &DirEntry) -> bool {
+        entry
+            .file_name()
+            .to_str()
+            .map(|s| entry.depth() == 0 || !s.starts_with("."))
+            .unwrap_or(false)
+    }
+
     /// https://github.com/rust-lang/crates.io-index/blob/master/.github/workflows/update-dl-url.yml
     ///
     /// ```YAML
@@ -214,11 +224,11 @@ impl CrateIndex {
     ///   URL_s3_primary: "https://crates-io.s3-us-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
     ///   URL_s3_fallback: "https://crates-io-fallback.s3-eu-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
     /// ```
-    pub fn downloads(&self, path: PathBuf) -> FreightResult {
+    pub fn _downloads(&self, path: PathBuf) -> FreightResult {
         let mut urls = Vec::new();
 
         WalkDir::new(self.path()).into_iter()
-            .filter_entry(|e| is_not_hidden(e))
+            .filter_entry(|e| self.is_not_hidden(e))
             .filter_map(|v| v.ok())
             .for_each(|x| {
                 if x.file_type().is_file() && x.path().extension().unwrap_or_default() != "json" {
@@ -247,12 +257,12 @@ impl CrateIndex {
 
         let mut i = 0;
         for c in urls {
-            let (url, file, cksum) = c;
+            let (url, file, check_sum) = c;
 
             // https://github.com/RustScan/RustScan/wiki/Thread-main-paniced-at-too-many-open-files
             // 10,20,40,80,120,160,320
             if i % 10 == 0 {
-                let mut rng = rand::thread_rng();
+                let mut rng = thread_rng();
                 thread::sleep(Duration::from_secs(rng.gen_range(1..5)));
             }
 
@@ -266,7 +276,7 @@ impl CrateIndex {
                     let result = hasher.finalize();
                     let hex = format!("{:x}", result);
 
-                    if hex == cksum {
+                    if hex == check_sum {
                         println!("###[ALREADY] \t{:?}", f);
                     } else {
                         let p = Path::new(&file);
@@ -298,16 +308,8 @@ impl CrateIndex {
     }
 }
 
-/// Check whether the directory is hidden
-fn is_not_hidden(entry: &DirEntry) -> bool {
-    entry
-        .file_name()
-        .to_str()
-        .map(|s| entry.depth() == 0 || !s.starts_with("."))
-        .unwrap_or(false)
-}
 
-/// Print processbar while clone data from git
+/// Print progressbar while clone data from git
 ///
 ///
 ///
@@ -360,7 +362,7 @@ fn print(state: &mut State) {
 
 /// If destination path is not empty, run pull instead of clone
 pub fn run(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
-    if opts.no_processbar {
+    if opts.no_progressbar {
         println!("no-progressbar has been set to true, it will not be displayed!");
     }
     if Path::new(index.path.as_path()).exists() {
@@ -372,7 +374,7 @@ pub fn run(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
 }
 
 /// Check the destination path is a crates-io index
-pub fn cratesio_index_check(repo: &Repository) -> bool {
+pub fn crates_io_index_check(repo: &Repository) -> bool {
     let remote_name = &String::from("origin");
     let remote = repo.find_remote(remote_name).unwrap();
     let url = remote.url().unwrap(); 
@@ -380,18 +382,18 @@ pub fn cratesio_index_check(repo: &Repository) -> bool {
     if CrateIndex::CRATE_REGISTRY.contains(&url) {
         true
     } else {
-        panic!("Traget url is not a crates index: {}", url)
+        panic!("Target url is not a crates index: {}", url)
     }
 }
 
 /// fetch the remote commit and show callback progress
 fn do_fetch<'a>(
-    repo: &'a git2::Repository,
+    repo: &'a Repository,
     refs: &[&str],
     remote: &'a mut git2::Remote,
     opts:& SyncOptions,
 ) -> Result<git2::AnnotatedCommit<'a>, git2::Error> {
-    let mut cb = git2::RemoteCallbacks::new();
+    let mut cb = RemoteCallbacks::new();
 
     // Print out our transfer progress.
     cb.transfer_progress(|stats| {
@@ -414,9 +416,9 @@ fn do_fetch<'a>(
         true
     });
 
-    let mut fo = git2::FetchOptions::new();
+    let mut fo = FetchOptions::new();
 
-    if !opts.no_processbar {
+    if !opts.no_progressbar {
         fo.remote_callbacks(cb);
     }
 
@@ -466,7 +468,7 @@ fn fast_forward(
     lb.set_target(rc.id(), &msg)?;
     repo.set_head(&name)?;
     repo.checkout_head(Some(
-        git2::build::CheckoutBuilder::default()
+        CheckoutBuilder::default()
             // For some reason the force is required to make the working directory actually get updated
             // I suspect we should be adding some logic to handle dirty working directory states
             // but this is just an example so maybe not.
@@ -490,7 +492,7 @@ fn normal_merge(
     let mut idx = repo.merge_trees(&ancestor, &local_tree, &remote_tree, None)?;
 
     if idx.has_conflicts() {
-        println!("Merge conficts detected...");
+        println!("Merge conflicts detected...");
         repo.checkout_index(Some(&mut idx), None)?;
         return Ok(());
     }
@@ -514,7 +516,7 @@ fn normal_merge(
     Ok(())
 }
 
-/// Do a merge analysis to determine wether it should fast_forward or merge
+/// Do a merge analysis to determine whether it should fast_forward or merge
 fn do_merge<'a>(
     repo: &'a Repository,
     remote_branch: &str,
@@ -523,12 +525,12 @@ fn do_merge<'a>(
     // 1. do a merge analysis
     let analysis = repo.merge_analysis(&[&fetch_commit])?;
 
-    // 2. Do the appopriate merge
+    // 2. Do the appropriate merge
     if analysis.0.is_fast_forward() {
         println!("Doing a fast forward");
         // do a fast forward
-        let refname = format!("refs/heads/{}", remote_branch);
-        match repo.find_reference(&refname) {
+        let ref_name = format!("refs/heads/{}", remote_branch);
+        match repo.find_reference(&ref_name) {
             Ok(mut r) => {
                 fast_forward(repo, &mut r, &fetch_commit)?;
             }
@@ -537,14 +539,14 @@ fn do_merge<'a>(
                 // commit directly. Usually this is because you are pulling
                 // into an empty repository.
                 repo.reference(
-                    &refname,
+                    &ref_name,
                     fetch_commit.id(),
                     true,
                     &format!("Setting {} to {}", remote_branch, fetch_commit.id()),
                 )?;
-                repo.set_head(&refname)?;
+                repo.set_head(&ref_name)?;
                 repo.checkout_head(Some(
-                    git2::build::CheckoutBuilder::default()
+                    CheckoutBuilder::default()
                         .allow_conflicts(true)
                         .conflict_style_merge(true)
                         .force(),
@@ -558,6 +560,7 @@ fn do_merge<'a>(
     } else {
         println!("Nothing to do...");
     }
+
     Ok(())
 }
 
@@ -566,15 +569,14 @@ fn do_merge<'a>(
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+    use crate::crates::index::SyncOptions;
 
     #[test]
     fn test_clone() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("data/tests/fixtures/crates.io-index");
 
-        let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path, Default::default());
-
-        // index.clone().unwrap();
+        let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path);
     }
 
     #[test]
@@ -582,11 +584,9 @@ mod tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("data/tests/fixtures/crates.io-index");
 
-        let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path, Default::default());
+        let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path);
 
         let mut crates = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         crates.push("data/tests/fixtures/crates");
-
-        // index.downloads(crates).unwrap();
     }
 }

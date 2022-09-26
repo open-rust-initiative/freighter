@@ -27,7 +27,7 @@ pub fn main(_config: &mut Config) -> FreightResult {
     // let cmd = args.subcommand_name().unwrap();
 
     let (cmd, subcommand_args) = match args.subcommand() {
-        Some((cmda, args)) => (cmda, args),
+        Some((cmd, args)) => (cmd, args),
         _ => {
             // No subcommand provided.
             cli().print_help()?;
@@ -68,16 +68,9 @@ See 'freight help <command>' for more information on a specific command.\n"
 ///
 ///
 pub fn execute_subcommand(config: &mut Config, cmd: &str, args: &ArgMatches) -> FreightResult {
-    let f = match cmd {
-        "sync" => commands::sync::exec(config, args),
-       _ => {
-            let err = FreighterError::new(
-                anyhow::anyhow!("Unknown subcommand: {}", cmd),
-                1,
-            );
-            return Err(err);
-        }
-    };
-
-    f
+    if let Some(f) = commands::builtin_exec(cmd) {
+        return f(config, args)
+    } else {
+        Err(FreighterError::unknown_command(cmd.to_string()))
+    }
 }

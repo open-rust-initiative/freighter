@@ -1,14 +1,15 @@
-///
-///
-///
-///
-///
-///
+//!
+//!
+//!
+//!
+//!
+//!
 
 use git2;
 
 pub type FreightResult = Result<(), FreighterError>;
 
+///
 ///
 #[derive(Debug)]
 pub struct FreighterError {
@@ -17,11 +18,19 @@ pub struct FreighterError {
 }
 
 /// The Freighter error is the error type used at Freight's CLI and others.
+///
 impl FreighterError {
     pub fn new(error: anyhow::Error, code: i32) -> FreighterError {
         FreighterError {
             error: Some(error),
             code,
+        }
+    }
+
+    pub fn unknown_command(cmd: String) -> FreighterError {
+        FreighterError {
+            error: anyhow::anyhow!("Unknown command: {}", cmd).into(),
+            code: 1,
         }
     }
 
@@ -31,12 +40,14 @@ impl FreighterError {
 }
 
 ///
+///
 impl From<anyhow::Error> for FreighterError {
     fn from(err: anyhow::Error) -> FreighterError {
         FreighterError::new(err, 101)
     }
 }
 
+///
 ///
 impl From<clap::Error> for FreighterError {
     fn from(err: clap::Error) -> FreighterError {
@@ -46,6 +57,7 @@ impl From<clap::Error> for FreighterError {
 }
 
 ///
+///
 impl From<std::io::Error> for FreighterError {
     fn from(err: std::io::Error) -> FreighterError {
         FreighterError::new(err.into(), 1)
@@ -53,12 +65,14 @@ impl From<std::io::Error> for FreighterError {
 }
 
 ///
+///
 impl From<git2::Error> for FreighterError {
     fn from(err: git2::Error) -> FreighterError {
         FreighterError::new(err.into(), 1)
     }
 }
 
+///
 ///
 impl From<walkdir::Error> for FreighterError {
     fn from(err: walkdir::Error) -> FreighterError {

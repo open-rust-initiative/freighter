@@ -44,6 +44,7 @@ use crate::errors::FreightResult;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CrateIndex {
     pub url: Url,
+    /// index path
     pub path: PathBuf,
 }
 
@@ -79,7 +80,7 @@ impl Default for CrateIndex {
     }
 }
 
-/// Crate preserve the crate file info 
+/// Crate preserve the crates info parse from registry json file
 ///
 ///
 #[derive(Serialize, Deserialize, Debug)]
@@ -370,6 +371,9 @@ pub fn run(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
     } else {
         index.clone(opts)?;
     }
+    let mut crates = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    crates.push("data/tests/fixtures/crates");
+    index.downloads(crates)?;
     Ok(())
 }
 

@@ -44,6 +44,7 @@ use crate::errors::FreightResult;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CrateIndex {
     pub url: Url,
+    /// index path
     pub path: PathBuf,
 }
 
@@ -59,8 +60,8 @@ pub struct State {
 }
 /// SyncOptions preserve the sync subcommand config 
 pub struct SyncOptions {
-    /// Whether to hide processbar when start sync.
-    pub no_processbar: bool
+    /// Whether to hide progressbar when start sync.
+    pub no_progressbar: bool
 }
 
 impl CrateIndex {
@@ -79,7 +80,7 @@ impl Default for CrateIndex {
     }
 }
 
-/// Crate preserve the crate file info 
+/// Crate preserve the crates info parse from registry json file
 ///
 ///
 #[derive(Serialize, Deserialize, Debug)]
@@ -177,7 +178,7 @@ impl CrateIndex {
         cb.transfer_progress(|stats| {
             let mut state = state.borrow_mut();
             state.progress = Some(stats.to_owned());
-            if !opts.no_processbar {
+            if !opts.no_progressbar {
                 print(&mut *state);
             }
             true
@@ -189,7 +190,7 @@ impl CrateIndex {
             state.path = path.map(|p| p.to_path_buf());
             state.current = cur;
             state.total = total;
-            if !opts.no_processbar {
+            if !opts.no_progressbar {
                 print(&mut *state);
             }
         });
@@ -307,7 +308,7 @@ fn is_not_hidden(entry: &DirEntry) -> bool {
         .unwrap_or(false)
 }
 
-/// Print processbar while clone data from git
+/// Print progressbar while clone data from git
 ///
 ///
 ///
@@ -360,7 +361,7 @@ fn print(state: &mut State) {
 
 /// If destination path is not empty, run pull instead of clone
 pub fn run(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
-    if opts.no_processbar {
+    if opts.no_progressbar {
         println!("no-progressbar has been set to true, it will not be displayed!");
     }
     if Path::new(index.path.as_path()).exists() {
@@ -368,6 +369,9 @@ pub fn run(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
     } else {
         index.clone(opts)?;
     }
+    let mut crates = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    crates.push("data/tests/fixtures/crates");
+    index.downloads(crates)?;
     Ok(())
 }
 
@@ -416,7 +420,7 @@ fn do_fetch<'a>(
 
     let mut fo = git2::FetchOptions::new();
 
-    if !opts.no_processbar {
+    if !opts.no_progressbar {
         fo.remote_callbacks(cb);
     }
 

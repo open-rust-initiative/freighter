@@ -59,7 +59,7 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
     let index = CrateIndex::default();
 
     run(index, &mut SyncOptions{
-        no_processbar: args.get_flag("no-progressbar"),
+        no_progressbar: args.get_flag("no-progressbar"),
     })?;
 
     Ok(())

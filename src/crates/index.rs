@@ -258,6 +258,8 @@ impl CrateIndex {
                     }
                 }
             });
+            println!("index iterator ends");
+            pool.join();
 
         // let mut rng = thread_rng();
         // urls.shuffle(&mut rng);

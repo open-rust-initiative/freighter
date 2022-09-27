@@ -21,9 +21,6 @@ use git2::{FetchOptions, Progress, RemoteCallbacks, Repository};
 use url::Url;
 use walkdir::{DirEntry, WalkDir};
 use serde::{Deserialize, Serialize};
-use rand::Rng;
-use rand::thread_rng;
-use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
 
 use std::collections::BTreeMap;
@@ -31,8 +28,8 @@ use std::cell::RefCell;
 use std::fs::{self, File};
 use std::io::{self, BufReader, BufRead, Write};
 use std::path::{Path, PathBuf};
-use std::thread;
-use std::time::Duration;
+use std::sync::mpsc::channel;
+use threadpool::ThreadPool;
 use std::env;
 use std::str;
 
@@ -226,8 +223,12 @@ impl CrateIndex {
     ///   URL_s3_fallback: "https://crates-io-fallback.s3-eu-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
     /// ```
     pub fn full_downloads(&self, path: PathBuf) -> FreightResult {
-        let mut urls = Vec::new();
+        // let mut urls = Vec::new();
 
+        let n_workers = 16;
+        let pool = ThreadPool::new(n_workers);
+        let (tx, _rx) = channel();
+        
         WalkDir::new(self.path()).into_iter()
             .filter_entry(|e| self.is_not_hidden(e))
             .filter_map(|v| v.ok())
@@ -248,64 +249,101 @@ impl CrateIndex {
                             fs::create_dir_all(&folder).unwrap();
                         }
 
-                        urls.push((url, file.to_str().unwrap().to_string(), c.cksum));
+                        let tx = tx.clone();
+                        pool.execute(move|| {
+                            Self::download_file((url, file.to_str().unwrap().to_string(), c.cksum));
+                            tx.send(1).expect("channel will be there waiting for the pool");
+                        });
+                        // urls.push((url, file.to_str().unwrap().to_string(), c.cksum));
                     }
                 }
             });
 
-        let mut rng = thread_rng();
-        urls.shuffle(&mut rng);
+        // let mut rng = thread_rng();
+        // urls.shuffle(&mut rng);
 
-        let mut i = 0;
-        for c in urls {
-            let (url, file, check_sum) = c;
+        // let mut i = 0;
+        // for c in urls {
+        //     let (url, file, check_sum) = c;
 
-            // https://github.com/RustScan/RustScan/wiki/Thread-main-paniced-at-too-many-open-files
-            // 10,20,40,80,120,160,320
-            if i % 10 == 0 {
-                let mut rng = thread_rng();
-                thread::sleep(Duration::from_secs(rng.gen_range(1..5)));
-            }
+        //     // https://github.com/RustScan/RustScan/wiki/Thread-main-paniced-at-too-many-open-files
+        //     // 10,20,40,80,120,160,320
+        //     if i % 10 == 0 {
+        //         let mut rng = thread_rng();
+        //         thread::sleep(Duration::from_secs(rng.gen_range(1..5)));
+        //     }
 
-            let handle = thread::spawn(move || {
-                let p = Path::new(&file);
+        //     thread::spawn(move || {
+        //         let p = Path::new(&file);
 
-                if p.is_file() == true && p.exists() == true {
-                    let mut hasher = Sha256::new();
-                    let mut f = File::open(p).unwrap();
-                    io::copy(&mut f, &mut hasher).unwrap();
-                    let result = hasher.finalize();
-                    let hex = format!("{:x}", result);
+        //         if p.is_file() == true && p.exists() == true {
+        //             let mut hasher = Sha256::new();
+        //             let mut f = File::open(p).unwrap();
+        //             io::copy(&mut f, &mut hasher).unwrap();
+        //             let result = hasher.finalize();
+        //             let hex = format!("{:x}", result);
 
-                    if hex == check_sum {
-                        println!("###[ALREADY] \t{:?}", f);
-                    } else {
-                        let p = Path::new(&file);
+        //             if hex == check_sum {
+        //                 println!("###[ALREADY] \t{:?}", f);
+        //             } else {
+        //                 let p = Path::new(&file);
 
-                        println!("!!![REMOVE] \t\t {:?} !", f);
-                        fs::remove_file(p).unwrap();
+        //                 println!("!!![REMOVE] \t\t {:?} !", f);
+        //                 fs::remove_file(p).unwrap();
 
-                        let mut resp = reqwest::blocking::get(url).unwrap();
-                        let mut out = File::create(p).unwrap();
-                        io::copy(&mut resp, &mut out).unwrap();
+        //                 let mut resp = reqwest::blocking::get(url).unwrap();
+        //                 let mut out = File::create(p).unwrap();
+        //                 io::copy(&mut resp, &mut out).unwrap();
 
-                        println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);
-                    }
-                } else {
-                    let mut resp = reqwest::blocking::get(url).unwrap();
-                    let mut out = File::create(file).unwrap();
-                    io::copy(&mut resp, &mut out).unwrap();
+        //                 println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);
+        //             }
+        //         } else {
+        //             let mut resp = reqwest::blocking::get(url).unwrap();
+        //             let mut out = File::create(file).unwrap();
+        //             io::copy(&mut resp, &mut out).unwrap();
 
-                    println!("&&&[NEW] \t\t {:?}", out);
-                }
+        //             println!("&&&[NEW] \t\t {:?}", out);
+        //         }
 
-            });
-            // handle.join().unwrap();
+        //     });
 
-            i += 1;
-        }
+        //     i += 1;
+        // }
 
         Ok(())
+    }
+
+    pub fn download_file(c:(String, String, String)) {
+        let (url, file, check_sum) = c;
+        let p = Path::new(&file);
+
+        if p.is_file() == true && p.exists() == true {
+            let mut hasher = Sha256::new();
+            let mut f = File::open(p).unwrap();
+            io::copy(&mut f, &mut hasher).unwrap();
+            let result = hasher.finalize();
+            let hex = format!("{:x}", result);
+
+            if hex == check_sum {
+                println!("###[ALREADY] \t{:?}", f);
+            } else {
+                let p = Path::new(&file);
+
+                println!("!!![REMOVE] \t\t {:?} !", f);
+                fs::remove_file(p).unwrap();
+
+                let mut resp = reqwest::blocking::get(&url).unwrap();
+                let mut out = File::create(p).unwrap();
+                io::copy(&mut resp, &mut out).unwrap();
+
+                println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);                
+            }
+        } else {
+            let mut resp = reqwest::blocking::get(url).unwrap();
+            let mut out = File::create(file).unwrap();
+            io::copy(&mut resp, &mut out).unwrap();
+            println!("&&&[NEW] \t\t {:?}", out);            
+        }
     }
 }
 
@@ -578,7 +616,6 @@ fn do_merge<'a>(
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
-    use crate::crates::index::SyncOptions;
 
     #[test]
     fn test_clone() {

@@ -28,7 +28,7 @@ use clap::ArgMatches;
 
 use crate::config::Config;
 use crate::errors::FreightResult;
-use crate::crates::index::{CrateIndex, SyncOptions, run};
+use crate::crates::index::{CrateIndex, download};
 use crate::crates::command_prelude::*;
 
 /// The __sync__ subcommand
@@ -55,12 +55,10 @@ OPTIONS:
 ///
 ///
 ///
-pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
+pub fn exec(_config: &mut Config, _args: &ArgMatches) -> FreightResult {
     let index = CrateIndex::default();
 
-    run(index, &mut SyncOptions{
-        no_progressbar: args.get_flag("no-progressbar"),
-    })?;
+    download(index).unwrap();
 
     Ok(())
 }

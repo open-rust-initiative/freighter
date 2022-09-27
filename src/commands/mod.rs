@@ -10,6 +10,7 @@ use crate::cli::App;
 use crate::config::Config;
 use crate::errors::FreightResult;
 
+pub(crate) mod pull;
 pub(crate) mod sync;
 
 /// The builtin function is the entry point of commands mod. Each subcommand is a
@@ -22,6 +23,7 @@ pub(crate) mod sync;
 ///
 pub fn builtin() -> Vec<App> {
     vec![
+        pull::cli(),
         sync::cli(),
     ]
 }
@@ -31,6 +33,7 @@ pub fn builtin() -> Vec<App> {
 ///
 pub fn builtin_exec(cmd: &str) -> Option<fn(&mut Config, &ArgMatches) -> FreightResult> {
     let f = match cmd {
+        "pull" => pull::exec,
         "sync" => sync::exec,
         _ => return None,
     };

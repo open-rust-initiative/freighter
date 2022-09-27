@@ -225,7 +225,7 @@ impl CrateIndex {
     ///   URL_s3_primary: "https://crates-io.s3-us-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
     ///   URL_s3_fallback: "https://crates-io-fallback.s3-eu-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
     /// ```
-    pub fn _downloads(&self, path: PathBuf) -> FreightResult {
+    pub fn full_downloads(&self, path: PathBuf) -> FreightResult {
         let mut urls = Vec::new();
 
         WalkDir::new(self.path()).into_iter()
@@ -300,7 +300,7 @@ impl CrateIndex {
                 }
 
             });
-            handle.join().unwrap();
+            // handle.join().unwrap();
 
             i += 1;
         }
@@ -362,18 +362,23 @@ fn print(state: &mut State) {
 }
 
 /// If destination path is not empty, run pull instead of clone
-pub fn run(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
+pub fn pull(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
     if opts.no_progressbar {
         println!("no-progressbar has been set to true, it will not be displayed!");
     }
     if Path::new(index.path.as_path()).exists() {
-        index.pull(opts)?;
+        index.pull(opts).unwrap();
     } else {
-        index.clone(opts)?;
+        index.clone(opts).unwrap();
     }
+    Ok(())
+}
+
+/// full download from registry
+pub fn download(index: CrateIndex) -> FreightResult {
     let mut crates = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     crates.push("data/tests/fixtures/crates");
-    index.downloads(crates)?;
+    index.full_downloads(crates).unwrap();
     Ok(())
 }
 

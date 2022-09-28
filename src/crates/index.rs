@@ -25,15 +25,14 @@ use sha2::{Digest, Sha256};
 
 use std::collections::BTreeMap;
 use std::cell::RefCell;
-use std::fs::{self, File};
-use std::io::{self, BufReader, BufRead, Write};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufReader, BufRead, Write, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
 use threadpool::ThreadPool;
-use std::env;
 use std::str;
 
-use crate::errors::FreightResult;
+use crate::errors::{FreightResult};
 
 /// `CrateIndex` is a wrapper `Git Repository` that crates-io index.
 ///
@@ -43,6 +42,8 @@ pub struct CrateIndex {
     pub url: Url,
     /// index path
     pub path: PathBuf,
+    //download crates path
+    pub crates_path: PathBuf,
 }
 
 /// State contains the progress when download crates file
@@ -58,7 +59,22 @@ pub struct State {
 /// SyncOptions preserve the sync subcommand config 
 pub struct SyncOptions {
     /// Whether to hide progressbar when start sync.
-    pub no_progressbar: bool
+    pub no_progressbar: bool,
+    /// start traverse all directories
+    pub init: bool,
+    // pub path: Option<String>,
+    // pub crates_path: Option<String>,
+}
+
+impl Default for SyncOptions {
+    fn default() -> Self {
+        SyncOptions {
+            no_progressbar: false,
+            init: false,
+            // index_path: Some(String::from("$HOME/.freighter/crates-io-index".to_owned())),
+            // crates_path: Some(String::from("$HOME/.freighter/crates".to_owned())),
+        }
+    }
 }
 
 impl CrateIndex {
@@ -68,11 +84,10 @@ impl CrateIndex {
 
 impl Default for CrateIndex {
     fn default() -> CrateIndex {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("data/tests/fixtures/crates-io-index");
         CrateIndex{
             url: Url::parse(CrateIndex::CRATE_REGISTRY[0]).unwrap(),
-            path,
+            path: dirs::home_dir().unwrap().join(".freighter/crates-io-index"),
+            crates_path: dirs::home_dir().unwrap().join(".freighter/crates"),
         }
     }
 }
@@ -128,8 +143,8 @@ pub enum DependencyKind {
 ///
 impl CrateIndex {
     /// Create a new `CrateIndex` from a `Url`.
-    pub fn new(url: Url, path: PathBuf) -> Self {
-        Self { url, path}
+    pub fn new(url: Url, path: PathBuf, crates_path: PathBuf) -> Self {
+        Self {url, path, crates_path}
     }
 
     /// Get the `path` of this `CrateIndex`.
@@ -151,7 +166,24 @@ impl CrateIndex {
             // use default name origin
             let remote_name = &String::from("origin");
             let mut remote = repo.find_remote(remote_name).unwrap();
+
+            let object = repo.revparse_single(&remote_branch)?;
+            let commit = object.peel_to_commit()?;
+
             let fetch_commit = do_fetch(&repo, &[remote_branch], &mut remote, opts)?;
+            let file_name = "pull_history.temp";
+            let mut f = match OpenOptions::new().write(true).append(true).open(file_name) {
+                Ok(f) => f,
+                Err(err) => match err.kind() {
+                    ErrorKind::NotFound => File::create(file_name).unwrap(),
+                    other_error => panic!("something wrong: {}", other_error),
+                }
+            };
+            // save pull record commit id to file
+            if commit.id() != fetch_commit.id() {
+                writeln!(f, "{}", format!("{},{}", commit.id(), &fetch_commit.id())).unwrap();
+            }
+            println!("{}", format!("commit id：{}， remote id :{}", commit.id(), &fetch_commit.id())); 
             do_merge(&repo, &remote_branch, fetch_commit)
         } else {
             panic!("Target path is not a crates index: {}", &self.path.to_str().unwrap());
@@ -260,6 +292,7 @@ impl CrateIndex {
             });
             println!("index iterator ends");
             pool.join();
+            println!("sync ends with {} task failed", pool.panic_count());
 
         // let mut rng = thread_rng();
         // urls.shuffle(&mut rng);
@@ -415,10 +448,27 @@ pub fn pull(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
 }
 
 /// full download from registry
-pub fn download(index: CrateIndex) -> FreightResult {
-    let mut crates = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    crates.push("data/tests/fixtures/crates");
-    index.full_downloads(crates).unwrap();
+pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
+    let crates = index.crates_path.clone();
+    if opts.init {
+        index.full_downloads(crates).unwrap();
+    } else {
+        // TODO
+        // let args = diff::Args {
+        //     arg_from_oid: Some("fa7b8dba0c51b5e223c9cd30052db1f759fd6eba".to_owned()),
+        //     arg_to_oid: Some("45f7bb9275d28e370c58a229d750cad8108e6633".to_owned()),
+        //     flag_name_only: true,
+        //     flag_patch: true,
+        //     flag_color: true,
+        //     flag_no_color: false,
+        //     flag_git_dir: Some(index.path.to_str().unwrap().to_string().to_owned()),
+        // };
+        // match diff::run(&args) {
+        //     Ok(()) => {}
+        //     Err(e) => println!("error: {}", e),
+        // }
+    }
+
     Ok(())
 }
 
@@ -622,19 +672,21 @@ mod tests {
     #[test]
     fn test_clone() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("data/tests/fixtures/crates.io-index");
+        let mut crates_path = path.clone();
+        path.push("data/tests/fixtures/crates-io-index");
+        crates_path.push("data/tests/fixtures/crates");
 
-        let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path);
+
+        let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path, crates_path);
     }
 
     #[test]
     fn test_downloads() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("data/tests/fixtures/crates.io-index");
+        let mut crates_path = path.clone();
+        path.push("data/tests/fixtures/crates-io-index");
+        crates_path.push("data/tests/fixtures/crates");
 
-        let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path);
-
-        let mut crates = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        crates.push("data/tests/fixtures/crates");
+        let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path, crates_path);
     }
 }

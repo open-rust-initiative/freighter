@@ -76,6 +76,10 @@ EXAMPLES
 
        freighter sync download --init
 
+3. Download all crates file to specify directory:
+
+       freighter sync -c /home/username download --init
+
 \n")
 }
 

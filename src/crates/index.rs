@@ -16,7 +16,7 @@
 /// - [ ] 8. Change the test index git repo with local git repository for test performance
 
 use git2::build::{CheckoutBuilder, RepoBuilder};
-use git2::{FetchOptions, Progress, RemoteCallbacks, Repository};
+use git2::{FetchOptions, Progress, RemoteCallbacks, Repository, ObjectType, Object, DiffFormat, DiffLine, DiffOptions};
 
 use url::Url;
 use walkdir::{DirEntry, WalkDir};
@@ -28,7 +28,7 @@ use std::cell::RefCell;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, BufRead, Write, ErrorKind};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel};
 use threadpool::ThreadPool;
 use std::str;
 
@@ -44,6 +44,7 @@ pub struct CrateIndex {
     pub path: PathBuf,
     //download crates path
     pub crates_path: PathBuf,
+    pub pull_record: PathBuf
 }
 
 /// State contains the progress when download crates file
@@ -62,8 +63,6 @@ pub struct SyncOptions {
     pub no_progressbar: bool,
     /// start traverse all directories
     pub init: bool,
-    // pub path: Option<String>,
-    // pub crates_path: Option<String>,
 }
 
 impl Default for SyncOptions {
@@ -71,8 +70,6 @@ impl Default for SyncOptions {
         SyncOptions {
             no_progressbar: false,
             init: false,
-            // index_path: Some(String::from("$HOME/.freighter/crates-io-index".to_owned())),
-            // crates_path: Some(String::from("$HOME/.freighter/crates".to_owned())),
         }
     }
 }
@@ -80,6 +77,7 @@ impl Default for SyncOptions {
 impl CrateIndex {
     /// default crate registry
     pub const CRATE_REGISTRY: [&'static str; 3] = ["https://github.com/rust-lang/crates.io-index.git","",""];
+    pub const RECORD_NAME: &'static str = "record.cache";
 }
 
 impl Default for CrateIndex {
@@ -88,6 +86,7 @@ impl Default for CrateIndex {
             url: Url::parse(CrateIndex::CRATE_REGISTRY[0]).unwrap(),
             path: dirs::home_dir().unwrap().join(".freighter/crates-io-index"),
             crates_path: dirs::home_dir().unwrap().join(".freighter/crates"),
+            pull_record: dirs::home_dir().unwrap().join(".freighter/log")
         }
     }
 }
@@ -144,7 +143,7 @@ pub enum DependencyKind {
 impl CrateIndex {
     /// Create a new `CrateIndex` from a `Url`.
     pub fn new(url: Url, path: PathBuf, crates_path: PathBuf) -> Self {
-        Self {url, path, crates_path}
+        Self {url, path, crates_path, ..Default::default()}
     }
 
     /// Get the `path` of this `CrateIndex`.
@@ -154,11 +153,8 @@ impl CrateIndex {
 
     /// Check the destination path is a git repository and pull
     pub fn pull(&self, opts: &SyncOptions) -> FreightResult {
-        let path = &self.path.to_str().map(|s| &s[..]).unwrap_or(".");
-        let repo = match Repository::open(path) {
-            Ok(repo) => repo,
-            Err(e) => panic!("Target path is not a git repository: {}", e),
-        };
+
+        let repo = get_repo(self.path.clone());
         
         if crates_io_index_check(&repo) {
             // use default branch master
@@ -171,11 +167,15 @@ impl CrateIndex {
             let commit = object.peel_to_commit()?;
 
             let fetch_commit = do_fetch(&repo, &[remote_branch], &mut remote, opts)?;
-            let file_name = "pull_history.temp";
+            let file_name = &self.pull_record.join(CrateIndex::RECORD_NAME);
+
             let mut f = match OpenOptions::new().write(true).append(true).open(file_name) {
                 Ok(f) => f,
                 Err(err) => match err.kind() {
-                    ErrorKind::NotFound => File::create(file_name).unwrap(),
+                    ErrorKind::NotFound => {
+                        fs::create_dir_all(&self.pull_record).unwrap();
+                        File::create(file_name).unwrap()
+                    }
                     other_error => panic!("something wrong: {}", other_error),
                 }
             };
@@ -254,9 +254,7 @@ impl CrateIndex {
     ///   URL_s3_primary: "https://crates-io.s3-us-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
     ///   URL_s3_fallback: "https://crates-io-fallback.s3-eu-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
     /// ```
-    pub fn full_downloads(&self, path: PathBuf) -> FreightResult {
-        // let mut urls = Vec::new();
-
+    pub fn full_downloads(&self) -> FreightResult {
         let n_workers = 16;
         let pool = ThreadPool::new(n_workers);
         let (tx, _rx) = channel();
@@ -274,7 +272,7 @@ impl CrateIndex {
                         let c: Crate = serde_json::from_str(&line).unwrap();
 
                         let url = format!("https://static.crates.io/crates/{}/{}-{}.crate", &c.name, &c.name, &c.vers);
-                        let folder = path.join(&c.name);
+                        let folder = self.crates_path.join(&c.name);
                         let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
 
                         if folder.exists() == false {
@@ -283,103 +281,19 @@ impl CrateIndex {
 
                         let tx = tx.clone();
                         pool.execute(move|| {
-                            Self::download_file((url, file.to_str().unwrap().to_string(), c.cksum));
+                            download_file((url, file.to_str().unwrap().to_string(), c.cksum));
                             tx.send(1).expect("channel will be there waiting for the pool");
                         });
-                        // urls.push((url, file.to_str().unwrap().to_string(), c.cksum));
                     }
                 }
             });
             println!("index iterator ends");
             pool.join();
             println!("sync ends with {} task failed", pool.panic_count());
-
-        // let mut rng = thread_rng();
-        // urls.shuffle(&mut rng);
-
-        // let mut i = 0;
-        // for c in urls {
-        //     let (url, file, check_sum) = c;
-
-        //     // https://github.com/RustScan/RustScan/wiki/Thread-main-paniced-at-too-many-open-files
-        //     // 10,20,40,80,120,160,320
-        //     if i % 10 == 0 {
-        //         let mut rng = thread_rng();
-        //         thread::sleep(Duration::from_secs(rng.gen_range(1..5)));
-        //     }
-
-        //     thread::spawn(move || {
-        //         let p = Path::new(&file);
-
-        //         if p.is_file() == true && p.exists() == true {
-        //             let mut hasher = Sha256::new();
-        //             let mut f = File::open(p).unwrap();
-        //             io::copy(&mut f, &mut hasher).unwrap();
-        //             let result = hasher.finalize();
-        //             let hex = format!("{:x}", result);
-
-        //             if hex == check_sum {
-        //                 println!("###[ALREADY] \t{:?}", f);
-        //             } else {
-        //                 let p = Path::new(&file);
-
-        //                 println!("!!![REMOVE] \t\t {:?} !", f);
-        //                 fs::remove_file(p).unwrap();
-
-        //                 let mut resp = reqwest::blocking::get(url).unwrap();
-        //                 let mut out = File::create(p).unwrap();
-        //                 io::copy(&mut resp, &mut out).unwrap();
-
-        //                 println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);
-        //             }
-        //         } else {
-        //             let mut resp = reqwest::blocking::get(url).unwrap();
-        //             let mut out = File::create(file).unwrap();
-        //             io::copy(&mut resp, &mut out).unwrap();
-
-        //             println!("&&&[NEW] \t\t {:?}", out);
-        //         }
-
-        //     });
-
-        //     i += 1;
-        // }
-
         Ok(())
     }
 
-    pub fn download_file(c:(String, String, String)) {
-        let (url, file, check_sum) = c;
-        let p = Path::new(&file);
 
-        if p.is_file() == true && p.exists() == true {
-            let mut hasher = Sha256::new();
-            let mut f = File::open(p).unwrap();
-            io::copy(&mut f, &mut hasher).unwrap();
-            let result = hasher.finalize();
-            let hex = format!("{:x}", result);
-
-            if hex == check_sum {
-                println!("###[ALREADY] \t{:?}", f);
-            } else {
-                let p = Path::new(&file);
-
-                println!("!!![REMOVE] \t\t {:?} !", f);
-                fs::remove_file(p).unwrap();
-
-                let mut resp = reqwest::blocking::get(&url).unwrap();
-                let mut out = File::create(p).unwrap();
-                io::copy(&mut resp, &mut out).unwrap();
-
-                println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);                
-            }
-        } else {
-            let mut resp = reqwest::blocking::get(url).unwrap();
-            let mut out = File::create(file).unwrap();
-            io::copy(&mut resp, &mut out).unwrap();
-            println!("&&&[NEW] \t\t {:?}", out);            
-        }
-    }
 }
 
 
@@ -447,30 +361,101 @@ pub fn pull(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
     Ok(())
 }
 
-/// full download from registry
+/// full download and Incremental download from registry
 pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
-    let crates = index.crates_path.clone();
     if opts.init {
-        index.full_downloads(crates).unwrap();
+        index.full_downloads().unwrap();
     } else {
-        // TODO
-        // let args = diff::Args {
-        //     arg_from_oid: Some("fa7b8dba0c51b5e223c9cd30052db1f759fd6eba".to_owned()),
-        //     arg_to_oid: Some("45f7bb9275d28e370c58a229d750cad8108e6633".to_owned()),
-        //     flag_name_only: true,
-        //     flag_patch: true,
-        //     flag_color: true,
-        //     flag_no_color: false,
-        //     flag_git_dir: Some(index.path.to_str().unwrap().to_string().to_owned()),
-        // };
-        // match diff::run(&args) {
-        //     Ok(()) => {}
-        //     Err(e) => println!("error: {}", e),
-        // }
+        let file_name = &index.pull_record.join(CrateIndex::RECORD_NAME);
+        let mut input = OpenOptions::new().read(true).write(true).open(file_name).unwrap();
+        let buffered = BufReader::new(&mut input);
+        println!("crates-io-index modified:");
+        for line in buffered.lines() {
+            let line = line.unwrap();
+            let vec: Vec<&str> = line.split(",").collect();
+            match git2_diff(&index, vec[0], vec[1]) {
+                Ok(()) => {}
+                Err(e) => println!("error: {}", e),
+            }
+        }
+        // enmty file
+        File::create(file_name).unwrap();
     }
 
     Ok(())
 }
+
+/// get repo from path
+pub fn get_repo(path: PathBuf) -> Repository {
+    let path = path.to_str().map(|s| &s[..]).unwrap_or(".");
+    match Repository::open(path) {
+        Ok(repo) => repo,
+        Err(e) => panic!("Target path is not a git repository: {}", e),
+    }
+}
+
+pub fn git2_diff(index: &CrateIndex, from_oid: &str, to_oid: &str) -> Result<(), anyhow::Error>{
+    let repo = get_repo(index.path.clone());
+    let t1 = tree_to_treeish(&repo, from_oid)?;
+    let t2 = tree_to_treeish(&repo, to_oid)?;
+    let mut opts = DiffOptions::new();
+    let diff = repo.diff_tree_to_tree(t1.unwrap().as_tree(), t2.unwrap().as_tree(), Some(&mut opts))?;
+    diff.print(DiffFormat::NameOnly, |_d, _h, l| hanlde_diff_line(l, index.crates_path.clone(), index.path.clone()))?;
+    Ok(())
+}
+
+/// Traversing directories in diff lines
+fn hanlde_diff_line(
+    line: DiffLine,
+    crates_path: PathBuf,
+    path: PathBuf
+) -> bool {
+    let path_subfix = str::from_utf8(line.content()).unwrap();
+    print!("{}", path_subfix);
+
+    let index = path.join(path_subfix.strip_suffix('\n').unwrap());
+
+
+    let input = File::open(index).unwrap();
+    let buffered = BufReader::new(input);
+
+    let n_workers = 16;
+    let pool = ThreadPool::new(n_workers);
+    let (tx, _rx) = channel();
+    
+    for line in buffered.lines() {
+        let line = line.unwrap();
+        let c: Crate = serde_json::from_str(&line).unwrap();
+
+        let url = format!("https://static.crates.io/crates/{}/{}-{}.crate", &c.name, &c.name, &c.vers);
+        let folder = crates_path.join(&c.name);
+        let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
+
+        if folder.exists() == false {
+            fs::create_dir_all(&folder).unwrap();
+        }
+        let tx = tx.clone();
+        pool.execute(move|| {
+            download_file((url, file.to_str().unwrap().to_string(), c.cksum));
+            tx.send(1).expect("channel will be there waiting for the pool");
+        });
+    }
+    pool.join();
+    true
+}
+
+/// ### References Codes
+///
+/// - [git2-rs](https://github.com/rust-lang/git2-rs)'s clone (example)[https://github.com/rust-lang/git2-rs/blob/master/examples/diff.rs].
+fn tree_to_treeish<'a>(
+    repo: &'a Repository,
+    arg: &str,
+) -> Result<Option<Object<'a>>, anyhow::Error> {
+    let obj = repo.revparse_single(arg)?;
+    let tree = obj.peel(ObjectType::Tree)?;
+    Ok(Some(tree))
+}
+
 
 /// Check the destination path is a crates-io index
 pub fn crates_io_index_check(repo: &Repository) -> bool {
@@ -663,7 +648,38 @@ fn do_merge<'a>(
     Ok(())
 }
 
+pub fn download_file(c:(String, String, String)) {
+    let (url, file, check_sum) = c;
+    let p = Path::new(&file);
 
+    if p.is_file() == true && p.exists() == true {
+        let mut hasher = Sha256::new();
+        let mut f = File::open(p).unwrap();
+        io::copy(&mut f, &mut hasher).unwrap();
+        let result = hasher.finalize();
+        let hex = format!("{:x}", result);
+
+        if hex == check_sum {
+            println!("###[ALREADY] \t{:?}", f);
+        } else {
+            let p = Path::new(&file);
+
+            println!("!!![REMOVE] \t\t {:?} !", f);
+            fs::remove_file(p).unwrap();
+
+            let mut resp = reqwest::blocking::get(&url).unwrap();
+            let mut out = File::create(p).unwrap();
+            io::copy(&mut resp, &mut out).unwrap();
+
+            println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);                
+        }
+    } else {
+        let mut resp = reqwest::blocking::get(url).unwrap();
+        let mut out = File::create(file).unwrap();
+        io::copy(&mut resp, &mut out).unwrap();
+        println!("&&&[NEW] \t\t {:?}", out);            
+    }
+}
 
 #[cfg(test)]
 mod tests {

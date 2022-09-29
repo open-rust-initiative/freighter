@@ -26,12 +26,12 @@
 
 use std::path::PathBuf;
 
-use clap::ArgMatches;
+use clap::{arg, ArgMatches};
 
 use crate::config::Config;
-use crate::errors::FreightResult;
-use crate::crates::index::{CrateIndex, download, SyncOptions, pull};
 use crate::crates::command_prelude::*;
+use crate::crates::index::{download, pull, CrateIndex, SyncOptions};
+use crate::errors::FreightResult;
 
 /// The __sync__ subcommand
 ///
@@ -48,8 +48,14 @@ pub fn cli() -> clap::Command<'static> {
         .about("Sync the crates from the upstream(crates.io) to the local registry")
         .usage(usage)
         .arg(flag("no-progressbar", "Hide progressbar when start sync"))
-        .arg(Arg::new("index-path").help("specify the download index path, default: $HOME/.freighter/crates-io-index"))
-        .arg(Arg::new("crates-path").help("specify the download crates file path, default: $HOME/.freighter/crates"))
+        .arg(
+            arg!(-i --"index-path" <FILE> "specify the download index path, default: $HOME/.freighter/crates-io-index")
+            .required(false)
+        )
+        .arg(
+            arg!(-c --"crates-path" <FILE> "specify the download crates file path, default: $HOME/.freighter/crates")
+            .required(false)
+        )
         .help_template(
             "\
 Sync the crates index and crate files from the upstream(crates.io) to the local filesystem, other cloud
@@ -77,35 +83,38 @@ EXAMPLES
 ///
 ///
 pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
-
     let mut index = CrateIndex {
         ..Default::default()
     };
 
     match args.get_one::<String>("index-path").cloned() {
-        Some(path) => index.path = PathBuf::from(path),
+        Some(path) => index.path = PathBuf::from(path).join("crates-io-index"),
         None => println!("use default index path"),
     };
     match args.get_one::<String>("crates-path").cloned() {
-        Some(crates) => index.crates_path = PathBuf::from(crates),
+        Some(crates) => index.crates_path = PathBuf::from(crates).join("crates"),
         None => println!("use default crates path"),
     };
 
-
+    println!("{:?}", index);
     let no_progressbar = args.get_flag("no-progressbar");
 
     match args.subcommand() {
-        Some(("pull", _args)) =>
-            pull(index, &mut SyncOptions{
+        Some(("pull", _args)) => pull(
+            index,
+            &mut SyncOptions {
                 no_progressbar,
                 ..Default::default()
-            })?, 
-        Some(("download", args)) =>    
-            download(index, &mut SyncOptions{
+            },
+        )?,
+        Some(("download", args)) => download(
+            index,
+            &mut SyncOptions {
                 no_progressbar,
                 init: args.get_flag("init"),
                 ..Default::default()
-            })?,
+            },
+        )?,
         Some((cmd, _)) => {
             unreachable!("unexpected command {}", cmd)
         }

@@ -87,7 +87,7 @@ impl Default for CrateIndex {
             path: dirs::home_dir().unwrap().join(".freighter/crates-io-index"),
             crates_path: dirs::home_dir().unwrap().join(".freighter/crates"),
             pull_record: dirs::home_dir().unwrap().join(".freighter/log"),
-            thread_count: 128,
+            thread_count: 16,
         }
     }
 }

@@ -28,7 +28,6 @@ use std::cell::RefCell;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, BufRead, Write, ErrorKind};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel};
 use threadpool::ThreadPool;
 use std::str;
 
@@ -44,7 +43,8 @@ pub struct CrateIndex {
     pub path: PathBuf,
     //download crates path
     pub crates_path: PathBuf,
-    pub pull_record: PathBuf
+    pub pull_record: PathBuf,
+    pub thread_count: usize
 }
 
 /// State contains the progress when download crates file
@@ -86,7 +86,8 @@ impl Default for CrateIndex {
             url: Url::parse(CrateIndex::CRATE_REGISTRY[0]).unwrap(),
             path: dirs::home_dir().unwrap().join(".freighter/crates-io-index"),
             crates_path: dirs::home_dir().unwrap().join(".freighter/crates"),
-            pull_record: dirs::home_dir().unwrap().join(".freighter/log")
+            pull_record: dirs::home_dir().unwrap().join(".freighter/log"),
+            thread_count: 128,
         }
     }
 }
@@ -255,9 +256,7 @@ impl CrateIndex {
     ///   URL_s3_fallback: "https://crates-io-fallback.s3-eu-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
     /// ```
     pub fn full_downloads(&self) -> FreightResult {
-        let n_workers = 16;
-        let pool = ThreadPool::new(n_workers);
-        let (tx, _rx) = channel();
+        let pool = ThreadPool::new(self.thread_count);
         
         WalkDir::new(self.path()).into_iter()
             .filter_entry(|e| self.is_not_hidden(e))
@@ -279,17 +278,15 @@ impl CrateIndex {
                             fs::create_dir_all(&folder).unwrap();
                         }
 
-                        let tx = tx.clone();
                         pool.execute(move|| {
                             download_file((url, file.to_str().unwrap().to_string(), c.cksum));
-                            tx.send(1).expect("channel will be there waiting for the pool");
                         });
                     }
                 }
             });
             println!("index iterator ends");
             pool.join();
-            println!("sync ends with {} task failed", pool.panic_count());
+            println!("sync ends with {} task failed",  pool.panic_count());
         Ok(())
     }
 
@@ -378,7 +375,7 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
                 Err(e) => println!("error: {}", e),
             }
         }
-        // enmty file
+        // empty file
         File::create(file_name).unwrap();
     }
 
@@ -400,44 +397,35 @@ pub fn git2_diff(index: &CrateIndex, from_oid: &str, to_oid: &str) -> Result<(),
     let t2 = tree_to_treeish(&repo, to_oid)?;
     let mut opts = DiffOptions::new();
     let diff = repo.diff_tree_to_tree(t1.unwrap().as_tree(), t2.unwrap().as_tree(), Some(&mut opts))?;
-    diff.print(DiffFormat::NameOnly, |_d, _h, l| hanlde_diff_line(l, index.crates_path.clone(), index.path.clone()))?;
+    diff.print(DiffFormat::NameOnly, |_d, _h, l| handle_diff_line(l, index))?;
     Ok(())
 }
 
 /// Traversing directories in diff lines
-fn hanlde_diff_line(
+fn handle_diff_line(
     line: DiffLine,
-    crates_path: PathBuf,
-    path: PathBuf
+    index: &CrateIndex,
 ) -> bool {
     let path_subfix = str::from_utf8(line.content()).unwrap();
-    print!("{}", path_subfix);
-
-    let index = path.join(path_subfix.strip_suffix('\n').unwrap());
-
-
-    let input = File::open(index).unwrap();
+    let crate_path = index.path.join(path_subfix.strip_suffix('\n').unwrap());
+    let input = File::open(crate_path).unwrap();
     let buffered = BufReader::new(input);
 
-    let n_workers = 16;
-    let pool = ThreadPool::new(n_workers);
-    let (tx, _rx) = channel();
+    let pool = ThreadPool::new(index.thread_count);
     
     for line in buffered.lines() {
         let line = line.unwrap();
         let c: Crate = serde_json::from_str(&line).unwrap();
 
         let url = format!("https://static.crates.io/crates/{}/{}-{}.crate", &c.name, &c.name, &c.vers);
-        let folder = crates_path.join(&c.name);
+        let folder = index.crates_path.join(&c.name);
         let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
 
         if folder.exists() == false {
             fs::create_dir_all(&folder).unwrap();
         }
-        let tx = tx.clone();
         pool.execute(move|| {
             download_file((url, file.to_str().unwrap().to_string(), c.cksum));
-            tx.send(1).expect("channel will be there waiting for the pool");
         });
     }
     pool.join();

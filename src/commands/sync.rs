@@ -56,6 +56,11 @@ pub fn cli() -> clap::Command<'static> {
             arg!(-c --"crates-path" <FILE> "specify the download crates file path, default: $HOME/.freighter/crates")
             .required(false)
         )
+        .arg(
+            arg!(-t --"thread-count" <VALUE> "specify the download thread count, default will be 16")
+            .value_parser(value_parser!(usize))
+            .required(false)
+        )
         .help_template(
             "\
 Sync the crates index and crate files from the upstream(crates.io) to the local filesystem, other cloud
@@ -98,6 +103,11 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
     match args.get_one::<String>("crates-path").cloned() {
         Some(crates) => index.crates_path = PathBuf::from(crates).join("crates"),
         None => println!("use default crates path"),
+    };
+
+    match args.get_one::<usize>("thread-count").cloned() {
+        Some(thread_count) => index.thread_count = thread_count,
+        None => println!("use default thread count 16"),
     };
 
     println!("{:?}", index);

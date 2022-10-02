@@ -279,13 +279,14 @@ impl CrateIndex {
                         }
 
                         pool.execute(move|| {
-                            download_file((url, file.to_str().unwrap().to_string(), c.cksum));
+                            download_file((url, file.to_str().unwrap().to_string(), c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str());
                         });
                     }
                 }
             });
-            println!("index iterator ends");
+
             pool.join();
+
             println!("sync ends with {} task failed",  pool.panic_count());
         Ok(())
     }
@@ -425,7 +426,7 @@ fn handle_diff_line(
             fs::create_dir_all(&folder).unwrap();
         }
         pool.execute(move|| {
-            download_file((url, file.to_str().unwrap().to_string(), c.cksum));
+            download_file((url, file.to_str().unwrap().to_string(), c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str());
         });
     }
     pool.join();
@@ -636,7 +637,7 @@ fn do_merge<'a>(
     Ok(())
 }
 
-pub fn download_file(c:(String, String, String)) {
+pub fn download_file(c:(String, String, String), folder: &str, filename: &str) {
     let (url, file, check_sum) = c;
     let p = Path::new(&file);
 
@@ -663,10 +664,24 @@ pub fn download_file(c:(String, String, String)) {
         }
     } else {
         let mut resp = reqwest::blocking::get(url).unwrap();
-        let mut out = File::create(file).unwrap();
+        let mut out = File::create(&file).unwrap();
         io::copy(&mut resp, &mut out).unwrap();
         println!("&&&[NEW] \t\t {:?}", out);            
     }
+
+    // Upload to the Digital Ocean Spaces with s3cmd
+    // URL: s3://rust-lang/crates/{}/{}
+    // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public
+    // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic
+    // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic --guess-mime-type
+    // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic --guess-mime-type --add-header="Content-Type: application/octet-stream"
+    std::process::Command::new("s3cmd")
+        .arg("put")
+        .arg(&file)
+        .arg(format!("s3://rust-lang/crates/{}/{}", folder, filename))
+        .arg("--acl-public")
+        .output()
+        .expect("failed to execute process");
 }
 
 #[cfg(test)]

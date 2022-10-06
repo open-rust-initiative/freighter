@@ -415,8 +415,8 @@ fn handle_diff_line(
     let pool = ThreadPool::new(index.thread_count);
     
     for line in buffered.lines() {
-        let line = line.unwrap();
-        let c: Crate = serde_json::from_str(&line).unwrap();
+        let c: Crate = serde_json::from_str(
+            &line.unwrap().as_str().strip_suffix('\n').unwrap()).unwrap();
 
         let url = format!("https://static.crates.io/crates/{}/{}-{}.crate", &c.name, &c.name, &c.vers);
         let folder = index.crates_path.join(&c.name);
@@ -425,11 +425,14 @@ fn handle_diff_line(
         if folder.exists() == false {
             fs::create_dir_all(&folder).unwrap();
         }
+
         pool.execute(move|| {
             download_file((url, file.to_str().unwrap().to_string(), c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str());
         });
     }
+
     pool.join();
+
     true
 }
 

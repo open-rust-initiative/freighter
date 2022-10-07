@@ -49,7 +49,7 @@ pub fn cli() -> clap::Command<'static> {
         .usage(usage)
         .arg(flag("no-progressbar", "Hide progressbar when start sync"))
         .arg(
-            arg!(-i --"index-path" <FILE> "specify the download index path, default: $HOME/.freighter/crates-io-index")
+            arg!(-i --"index-path" <FILE> "specify the download index path, default: $HOME/.freighter/crates.io-index")
             .required(false)
         )
         .arg(
@@ -97,7 +97,7 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
     };
 
     match args.get_one::<String>("index-path").cloned() {
-        Some(path) => index.path = PathBuf::from(path).join("crates-io-index"),
+        Some(path) => index.path = PathBuf::from(path).join("crates.1io-index"),
         None => println!("use default index path"),
     };
     match args.get_one::<String>("crates-path").cloned() {

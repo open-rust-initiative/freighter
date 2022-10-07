@@ -84,7 +84,7 @@ impl Default for CrateIndex {
     fn default() -> CrateIndex {
         CrateIndex{
             url: Url::parse(CrateIndex::CRATE_REGISTRY[0]).unwrap(),
-            path: dirs::home_dir().unwrap().join(".freighter/crates-io-index"),
+            path: dirs::home_dir().unwrap().join(".freighter/crates.io-index"),
             crates_path: dirs::home_dir().unwrap().join(".freighter/crates"),
             pull_record: dirs::home_dir().unwrap().join(".freighter/log"),
             thread_count: 16,
@@ -367,7 +367,7 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
         let file_name = &index.pull_record.join(CrateIndex::RECORD_NAME);
         let mut input = OpenOptions::new().read(true).write(true).open(file_name).unwrap();
         let buffered = BufReader::new(&mut input);
-        println!("crates-io-index modified:");
+        println!("crates.io-index modified:");
         for line in buffered.lines() {
             let line = line.unwrap();
             let vec: Vec<&str> = line.split(",").collect();
@@ -407,8 +407,8 @@ fn handle_diff_line(
     line: DiffLine,
     index: &CrateIndex,
 ) -> bool {
-    let path_subfix = str::from_utf8(line.content()).unwrap();
-    let crate_path = index.path.join(path_subfix.strip_suffix('\n').unwrap());
+    let path_suffix = str::from_utf8(line.content()).unwrap();
+    let crate_path = index.path.join(path_suffix.strip_suffix('\n').unwrap());
     let input = File::open(crate_path).unwrap();
     let buffered = BufReader::new(input);
 
@@ -417,7 +417,7 @@ fn handle_diff_line(
     for line in buffered.lines() {
         let line = line.unwrap();
         let c: Crate = serde_json::from_str(&line).unwrap();
-        
+
         let url = format!("https://static.crates.io/crates/{}/{}-{}.crate", &c.name, &c.name, &c.vers);
         let folder = index.crates_path.join(&c.name);
         let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
@@ -672,6 +672,9 @@ pub fn download_file(c:(String, String, String), folder: &str, filename: &str) {
         println!("&&&[NEW] \t\t {:?}", out);            
     }
 
+    // cargo download url is https://crates.rust-lang.pub/crates/{name}/{version}/download
+    //
+
     // Upload to the Digital Ocean Spaces with s3cmd
     // URL: s3://rust-lang/crates/{}/{}
     // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public
@@ -695,7 +698,7 @@ mod tests {
     fn test_clone() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let mut crates_path = path.clone();
-        path.push("data/tests/fixtures/crates-io-index");
+        path.push("data/tests/fixtures/crates.io-index");
         crates_path.push("data/tests/fixtures/crates");
 
 
@@ -706,7 +709,7 @@ mod tests {
     fn test_downloads() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let mut crates_path = path.clone();
-        path.push("data/tests/fixtures/crates-io-index");
+        path.push("data/tests/fixtures/crates.io-index");
         crates_path.push("data/tests/fixtures/crates");
 
         let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path, crates_path);

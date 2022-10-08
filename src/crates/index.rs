@@ -16,7 +16,7 @@
 /// - [ ] 8. Change the test index git repo with local git repository for test performance
 
 use git2::build::{CheckoutBuilder, RepoBuilder};
-use git2::{FetchOptions, Progress, RemoteCallbacks, Repository, ObjectType, Object, DiffFormat, DiffLine, DiffOptions};
+use git2::{FetchOptions, Progress, RemoteCallbacks, Repository, ObjectType, Object, DiffFormat, DiffLine, DiffOptions, ErrorCode};
 
 use url::Url;
 use walkdir::{DirEntry, WalkDir};
@@ -44,7 +44,9 @@ pub struct CrateIndex {
     //download crates path
     pub crates_path: PathBuf,
     pub pull_record: PathBuf,
-    pub thread_count: usize
+    pub thread_count: usize,
+    // upload file after download
+    pub upload: bool
 }
 
 /// State contains the progress when download crates file
@@ -88,6 +90,7 @@ impl Default for CrateIndex {
             crates_path: dirs::home_dir().unwrap().join(".freighter/crates"),
             pull_record: dirs::home_dir().unwrap().join(".freighter/log"),
             thread_count: 16,
+            upload: false,
         }
     }
 }
@@ -368,14 +371,16 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
         let mut input = OpenOptions::new().read(true).write(true).open(file_name).unwrap();
         let buffered = BufReader::new(&mut input);
         println!("crates.io-index modified:");
+        let pool = ThreadPool::new(index.thread_count);
         for line in buffered.lines() {
             let line = line.unwrap();
             let vec: Vec<&str> = line.split(",").collect();
-            match git2_diff(&index, vec[0], vec[1]) {
+            match git2_diff(&index, vec[0], vec[1], &pool) {
                 Ok(()) => {}
                 Err(e) => println!("error: {}", e),
             }
         }
+        pool.join();
         // empty file
         File::create(file_name).unwrap();
     }
@@ -388,17 +393,22 @@ pub fn get_repo(path: PathBuf) -> Repository {
     let path = path.to_str().map(|s| &s[..]).unwrap_or(".");
     match Repository::open(path) {
         Ok(repo) => repo,
-        Err(e) => panic!("Target path is not a git repository: {}", e),
+        Err(e) => match e.code() {
+            ErrorCode::NotFound => {
+                panic!("index path: {} not found, please execute freighter sync pull first", &path);
+            }
+            _other_error => panic!("Target path is not a git repository: {}", e),
+        }
     }
 }
 
-pub fn git2_diff(index: &CrateIndex, from_oid: &str, to_oid: &str) -> Result<(), anyhow::Error>{
+pub fn git2_diff(index: &CrateIndex, from_oid: &str, to_oid: &str, pool: &ThreadPool) -> Result<(), anyhow::Error>{
     let repo = get_repo(index.path.clone());
     let t1 = tree_to_treeish(&repo, from_oid)?;
     let t2 = tree_to_treeish(&repo, to_oid)?;
     let mut opts = DiffOptions::new();
     let diff = repo.diff_tree_to_tree(t1.unwrap().as_tree(), t2.unwrap().as_tree(), Some(&mut opts))?;
-    diff.print(DiffFormat::NameOnly, |_d, _h, l| handle_diff_line(l, index))?;
+    diff.print(DiffFormat::NameOnly, |_d, _h, l| handle_diff_line(l, index, pool))?;
     Ok(())
 }
 
@@ -406,32 +416,37 @@ pub fn git2_diff(index: &CrateIndex, from_oid: &str, to_oid: &str) -> Result<(),
 fn handle_diff_line(
     line: DiffLine,
     index: &CrateIndex,
+    pool: &ThreadPool,
 ) -> bool {
     let path_suffix = str::from_utf8(line.content()).unwrap();
     let crate_path = index.path.join(path_suffix.strip_suffix('\n').unwrap());
-    let input = File::open(crate_path).unwrap();
-    let buffered = BufReader::new(input);
+    match File::open(&crate_path) {
+        Ok(f) => {
+            let buffered = BufReader::new(f);
+            for line in buffered.lines() {
+                let line = line.unwrap();
+                let c: Crate = serde_json::from_str(&line).unwrap();
 
-    let pool = ThreadPool::new(index.thread_count);
-    
-    for line in buffered.lines() {
-        let line = line.unwrap();
-        let c: Crate = serde_json::from_str(&line).unwrap();
+                let url = format!("https://static.crates.io/crates/{}/{}-{}.crate", &c.name, &c.name, &c.vers);
+                let folder = index.crates_path.join(&c.name);
+                let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
 
-        let url = format!("https://static.crates.io/crates/{}/{}-{}.crate", &c.name, &c.name, &c.vers);
-        let folder = index.crates_path.join(&c.name);
-        let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
+                if folder.exists() == false {
+                    fs::create_dir_all(&folder).unwrap();
+                }
 
-        if folder.exists() == false {
-            fs::create_dir_all(&folder).unwrap();
+                pool.execute(move|| {
+                    download_file((url, file.to_str().unwrap().to_string(), c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str());
+                });
+            }
+        },
+        Err(err) => match err.kind() {
+            ErrorKind::NotFound => {
+                println!("This file might have been removed from crates-io:{}", &crate_path.display());
+            }
+            other_error => panic!("something wrong while open the crates file: {}", other_error),
         }
-
-        pool.execute(move|| {
-            download_file((url, file.to_str().unwrap().to_string(), c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str());
-        });
-    }
-
-    pool.join();
+    };
 
     true
 }

@@ -280,9 +280,9 @@ impl CrateIndex {
                         if folder.exists() == false {
                             fs::create_dir_all(&folder).unwrap();
                         }
-
+                        let upload = self.upload;
                         pool.execute(move|| {
-                            download_file((url, file.to_str().unwrap().to_string(), c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str());
+                            download_file(upload, (&url, &file.to_str().unwrap(), &c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str());
                         });
                     }
                 }
@@ -381,8 +381,10 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
             }
         }
         pool.join();
-        // empty file
-        File::create(file_name).unwrap();
+        if pool.panic_count() == 0 {
+            // empty file
+            File::create(file_name).unwrap();
+        }
     }
 
     Ok(())
@@ -434,9 +436,9 @@ fn handle_diff_line(
                 if folder.exists() == false {
                     fs::create_dir_all(&folder).unwrap();
                 }
-
+                let upload = index.upload;
                 pool.execute(move|| {
-                    download_file((url, file.to_str().unwrap().to_string(), c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str());
+                    download_file(upload, (&url, file.to_str().unwrap(), &c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str());
                 });
             }
         },
@@ -655,7 +657,7 @@ fn do_merge<'a>(
     Ok(())
 }
 
-pub fn download_file(c:(String, String, String), folder: &str, filename: &str) {
+pub fn download_file(upload: bool, c:(&str, &str, &str), folder: &str, filename: &str) {
     let (url, file, check_sum) = c;
     let p = Path::new(&file);
 
@@ -674,7 +676,7 @@ pub fn download_file(c:(String, String, String), folder: &str, filename: &str) {
             println!("!!![REMOVE] \t\t {:?} !", f);
             fs::remove_file(p).unwrap();
 
-            let mut resp = reqwest::blocking::get(&url).unwrap();
+            let mut resp = reqwest::blocking::get(url).unwrap();
             let mut out = File::create(p).unwrap();
             io::copy(&mut resp, &mut out).unwrap();
 
@@ -696,13 +698,15 @@ pub fn download_file(c:(String, String, String), folder: &str, filename: &str) {
     // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic
     // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic --guess-mime-type
     // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic --guess-mime-type --add-header="Content-Type: application/octet-stream"
-    std::process::Command::new("s3cmd")
+    if upload {
+        std::process::Command::new("s3cmd")
         .arg("put")
         .arg(&file)
         .arg(format!("s3://rust-lang/crates/{}/{}", folder, filename))
         .arg("--acl-public")
         .output()
         .expect("failed to execute process");
+    }
 }
 
 #[cfg(test)]

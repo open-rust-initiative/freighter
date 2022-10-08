@@ -42,7 +42,9 @@ pub fn cli() -> clap::Command<'static> {
     clap::Command::new("sync")
         .subcommand(subcommand("pull"))
         .subcommand(subcommand("download")
-            .arg(flag("init", "Start init download of crates file, this will traverse all index for full download")))
+            .arg(flag("init", "Start init download of crates file, this will traverse all index for full download"))
+            .arg(flag("upload", "upload file after download"))
+        )
         .subcommand_required(true)
         .arg_required_else_help(true)
         .about("Sync the crates from the upstream(crates.io) to the local registry")
@@ -121,14 +123,17 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
                 ..Default::default()
             },
         )?,
-        Some(("download", args)) => download(
-            index,
-            &mut SyncOptions {
-                no_progressbar,
-                init: args.get_flag("init"),
-                ..Default::default()
-            },
-        )?,
+        Some(("download", args)) => {
+            index.upload = args.get_flag("upload");
+            download(
+                index,
+                &mut SyncOptions {
+                    no_progressbar,
+                    init: args.get_flag("init"),
+                    ..Default::default()
+                },
+            )?
+        }
         Some((cmd, _)) => {
             unreachable!("unexpected command {}", cmd)
         }

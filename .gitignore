@@ -26,3 +26,7 @@ Cargo.lock
 data/tests/fixtures/crates-io-index
 data/tests/fixtures/crates/*.crate
 data/**
+
+
+# VSCode
+.vscode

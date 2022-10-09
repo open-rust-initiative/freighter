@@ -60,20 +60,12 @@ pub struct State {
     pub newline: bool,
 }
 /// SyncOptions preserve the sync subcommand config 
+#[derive(Default)]
 pub struct SyncOptions {
     /// Whether to hide progressbar when start sync.
     pub no_progressbar: bool,
     /// start traverse all directories
     pub init: bool,
-}
-
-impl Default for SyncOptions {
-    fn default() -> Self {
-        SyncOptions {
-            no_progressbar: false,
-            init: false,
-        }
-    }
 }
 
 impl CrateIndex {
@@ -167,7 +159,7 @@ impl CrateIndex {
             let remote_name = &String::from("origin");
             let mut remote = repo.find_remote(remote_name).unwrap();
 
-            let object = repo.revparse_single(&remote_branch)?;
+            let object = repo.revparse_single(remote_branch)?;
             let commit = object.peel_to_commit()?;
 
             let fetch_commit = do_fetch(&repo, &[remote_branch], &mut remote, opts)?;
@@ -188,7 +180,7 @@ impl CrateIndex {
                 writeln!(f, "{}", format!("{},{}", commit.id(), &fetch_commit.id())).unwrap();
             }
             println!("{}", format!("commit id：{}， remote id :{}", commit.id(), &fetch_commit.id())); 
-            do_merge(&repo, &remote_branch, fetch_commit)
+            do_merge(&repo, remote_branch, fetch_commit)
         } else {
             panic!("Target path is not a crates index: {}", &self.path.to_str().unwrap());
         }
@@ -277,12 +269,12 @@ impl CrateIndex {
                         let folder = self.crates_path.join(&c.name);
                         let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
 
-                        if folder.exists() == false {
+                        if !folder.exists() {
                             fs::create_dir_all(&folder).unwrap();
                         }
                         let upload = self.upload;
                         pool.execute(move|| {
-                            download_file(upload, (&url, &file.to_str().unwrap(), &c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str());
+                            download_file(upload, (&url, file.to_str().unwrap(), &c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str());
                         });
                     }
                 }
@@ -374,7 +366,7 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
         let pool = ThreadPool::new(index.thread_count);
         for line in buffered.lines() {
             let line = line.unwrap();
-            let vec: Vec<&str> = line.split(",").collect();
+            let vec: Vec<&str> = line.split(',').collect();
             match git2_diff(&index, vec[0], vec[1], &pool) {
                 Ok(()) => {}
                 Err(e) => println!("error: {}", e),
@@ -392,7 +384,7 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
 
 /// get repo from path
 pub fn get_repo(path: PathBuf) -> Repository {
-    let path = path.to_str().map(|s| &s[..]).unwrap_or(".");
+    let path = path.to_str().unwrap_or(".");
     match Repository::open(path) {
         Ok(repo) => repo,
         Err(e) => match e.code() {
@@ -433,7 +425,7 @@ fn handle_diff_line(
                 let folder = index.crates_path.join(&c.name);
                 let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
 
-                if folder.exists() == false {
+                if !folder.exists() {
                     fs::create_dir_all(&folder).unwrap();
                 }
                 let upload = index.upload;
@@ -543,7 +535,7 @@ fn do_fetch<'a>(
     }
 
     let fetch_head = repo.find_reference("FETCH_HEAD")?;
-    Ok(repo.reference_to_annotated_commit(&fetch_head)?)
+    repo.reference_to_annotated_commit(&fetch_head)
 }
 
 /// Set repo head to the newest remote commit
@@ -605,7 +597,9 @@ fn normal_merge(
         &[&local_commit, &remote_commit],
     )?;
     // Set working tree to match head.
-    repo.checkout_head(None)?;
+    repo.checkout_head(Some(
+        CheckoutBuilder::default().force(),
+    ))?;
     Ok(())
 }
 
@@ -649,7 +643,7 @@ fn do_merge<'a>(
     } else if analysis.0.is_normal() {
         // do a normal merge
         let head_commit = repo.reference_to_annotated_commit(&repo.head()?)?;
-        normal_merge(&repo, &head_commit, &fetch_commit)?;
+        normal_merge(repo, &head_commit, &fetch_commit)?;
     } else {
         println!("Nothing to do...");
     }
@@ -661,7 +655,7 @@ pub fn download_file(upload: bool, c:(&str, &str, &str), folder: &str, filename:
     let (url, file, check_sum) = c;
     let p = Path::new(&file);
 
-    if p.is_file() == true && p.exists() == true {
+    if p.is_file() && p.exists() {
         let mut hasher = Sha256::new();
         let mut f = File::open(p).unwrap();
         io::copy(&mut f, &mut hasher).unwrap();

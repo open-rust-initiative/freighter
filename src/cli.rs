@@ -16,7 +16,7 @@ use crate::errors::{FreighterError, FreightResult};
 ///
 ///
 
-pub type App = clap::Command<'static>;
+pub type App = clap::Command;
 
 ///
 ///
@@ -35,7 +35,7 @@ pub fn main(_config: &mut Config) -> FreightResult {
         }
     };
 
-    execute_subcommand(&mut config, cmd, &subcommand_args)
+    execute_subcommand(&mut config, cmd, subcommand_args)
 }
 
 ///
@@ -69,7 +69,7 @@ See 'freight help <command>' for more information on a specific command.\n"
 ///
 pub fn execute_subcommand(config: &mut Config, cmd: &str, args: &ArgMatches) -> FreightResult {
     if let Some(f) = commands::builtin_exec(cmd) {
-        return f(config, args)
+        f(config, args)
     } else {
         Err(FreighterError::unknown_command(cmd.to_string()))
     }

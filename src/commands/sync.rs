@@ -36,8 +36,7 @@ use crate::errors::FreightResult;
 /// The __sync__ subcommand
 ///
 
-pub fn cli() -> clap::Command<'static> {
-    let usage = "freight sync [OPTIONS] <SUBCOMMAND>";
+pub fn cli() -> clap::Command {
 
     clap::Command::new("sync")
         .subcommand(subcommand("pull"))
@@ -48,7 +47,6 @@ pub fn cli() -> clap::Command<'static> {
         .subcommand_required(true)
         .arg_required_else_help(true)
         .about("Sync the crates from the upstream(crates.io) to the local registry")
-        .usage(usage)
         .arg(flag("no-progressbar", "Hide progressbar when start sync"))
         .arg(
             arg!(-i --"index-path" <FILE> "specify the download index path, default: $HOME/.freighter/crates.io-index")
@@ -83,9 +81,9 @@ EXAMPLES
 
        freighter sync download --init
 
-3. Download all crates file to specify directory:
+3. Download crates file with multi-thread to specify directory:
 
-       freighter sync -c /home/username download --init
+       freighter sync -t 32 -c /home/username download
 
 \n")
 }
@@ -100,19 +98,19 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
 
     match args.get_one::<String>("index-path").cloned() {
         Some(path) => index.path = PathBuf::from(path).join("crates.1io-index"),
-        None => println!("use default index path"),
+        None => println!("use default index path: {}", index.path.display()),
     };
     match args.get_one::<String>("crates-path").cloned() {
         Some(crates) => index.crates_path = PathBuf::from(crates).join("crates"),
-        None => println!("use default crates path"),
+        None => println!("use default crates path: {}", index.crates_path.display()),
     };
 
     match args.get_one::<usize>("thread-count").cloned() {
         Some(thread_count) => index.thread_count = thread_count,
-        None => println!("use default thread count 16"),
+        None => println!("use default thread count: {}", index.thread_count),
     };
 
-    println!("{:?}", index);
+    println!("CrateIndex info : {:#?}", index);
     let no_progressbar = args.get_flag("no-progressbar");
 
     match args.subcommand() {

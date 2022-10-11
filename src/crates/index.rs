@@ -16,7 +16,7 @@
 /// - [ ] 8. Change the test index git repo with local git repository for test performance
 
 use git2::build::{CheckoutBuilder, RepoBuilder};
-use git2::{FetchOptions, Progress, RemoteCallbacks, Repository, ObjectType, Object, DiffFormat, DiffLine, DiffOptions, ErrorCode};
+use git2::{FetchOptions, Progress, RemoteCallbacks, Repository, ObjectType, Object, DiffFormat, DiffLine, DiffOptions, ErrorCode, Oid};
 
 use url::Url;
 use walkdir::{DirEntry, WalkDir};
@@ -72,6 +72,10 @@ impl CrateIndex {
     /// default crate registry
     pub const CRATE_REGISTRY: [&'static str; 3] = ["https://github.com/rust-lang/crates.io-index.git","",""];
     pub const RECORD_NAME: &'static str = "record.cache";
+    // use default branch master
+    pub const REMOTE_BRANCH: &'static str = "master";
+    // use default name origin
+    pub const REMOTE_NAME: &'static str = "origin";
 }
 
 impl Default for CrateIndex {
@@ -153,34 +157,14 @@ impl CrateIndex {
         let repo = get_repo(self.path.clone());
         
         if crates_io_index_check(&repo) {
-            // use default branch master
-            let remote_branch = &String::from("master");
-            // use default name origin
-            let remote_name = &String::from("origin");
-            let mut remote = repo.find_remote(remote_name).unwrap();
-
-            let object = repo.revparse_single(remote_branch)?;
+            let mut remote = repo.find_remote(CrateIndex::REMOTE_NAME).unwrap();
+            let object = repo.revparse_single(CrateIndex::REMOTE_BRANCH)?;
             let commit = object.peel_to_commit()?;
+            let fetch_commit = do_fetch(&repo, &[CrateIndex::REMOTE_BRANCH], &mut remote, opts)?;
 
-            let fetch_commit = do_fetch(&repo, &[remote_branch], &mut remote, opts)?;
-            let file_name = &self.pull_record.join(CrateIndex::RECORD_NAME);
-
-            let mut f = match OpenOptions::new().write(true).append(true).open(file_name) {
-                Ok(f) => f,
-                Err(err) => match err.kind() {
-                    ErrorKind::NotFound => {
-                        fs::create_dir_all(&self.pull_record).unwrap();
-                        File::create(file_name).unwrap()
-                    }
-                    other_error => panic!("something wrong: {}", other_error),
-                }
-            };
-            // save pull record commit id to file
-            if commit.id() != fetch_commit.id() {
-                writeln!(f, "{}", format!("{},{}", commit.id(), &fetch_commit.id())).unwrap();
-            }
+            self.generate_commit_record(&commit.id(), &fetch_commit.id());
             println!("{}", format!("commit id：{}， remote id :{}", commit.id(), &fetch_commit.id())); 
-            do_merge(&repo, remote_branch, fetch_commit)
+            do_merge(&repo, CrateIndex::REMOTE_BRANCH, fetch_commit)
         } else {
             panic!("Target path is not a crates index: {}", &self.path.to_str().unwrap());
         }
@@ -222,15 +206,36 @@ impl CrateIndex {
 
         let mut fo = FetchOptions::new();
         fo.remote_callbacks(cb);
-        RepoBuilder::new()
+        let repo = RepoBuilder::new()
             .fetch_options(fo)
             .with_checkout(co)
             .clone(self.url.as_ref(), self.path.as_path())?;
-        println!();
 
+        let object = repo.revparse_single(CrateIndex::REMOTE_BRANCH)?;
+        let commit = object.peel_to_commit()?;
+        // first commit of crates.io-index
+        self.generate_commit_record(&Oid::from_str("83ef4b3aa2e01d0cba0d267a68780aec797dd5f1").unwrap(), &commit.id());
         Ok(())
     }
 
+    /// save commit record in record.cache, it will write from first commit to current commit if command is git clone
+    pub fn generate_commit_record (&self, start_commit_id: &Oid, end_commit_id: &Oid)  {
+        let file_name = &self.pull_record.join(CrateIndex::RECORD_NAME);
+        let mut f = match OpenOptions::new().write(true).append(true).open(file_name) {
+            Ok(f) => f,
+            Err(err) => match err.kind() {
+                ErrorKind::NotFound => {
+                    fs::create_dir_all(&self.pull_record).unwrap();
+                    File::create(file_name).unwrap()
+                }
+                other_error => panic!("something wrong: {}", other_error),
+            }
+        };
+        // save record commit id only id does not matches
+        if start_commit_id != end_commit_id {
+            writeln!(f, "{}", format!("{},{}", start_commit_id, end_commit_id)).unwrap();
+        }
+    }
 
     /// Check whether the directory is hidden
     pub fn is_not_hidden(&self, entry: &DirEntry) -> bool {

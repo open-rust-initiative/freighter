@@ -97,7 +97,7 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
     };
 
     match args.get_one::<String>("index-path").cloned() {
-        Some(path) => index.path = PathBuf::from(path).join("crates.1io-index"),
+        Some(path) => index.path = PathBuf::from(path).join("crates.io-index"),
         None => println!("use default index path: {}", index.path.display()),
     };
     match args.get_one::<String>("crates-path").cloned() {

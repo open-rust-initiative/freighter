@@ -372,10 +372,7 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
         for line in buffered.lines() {
             let line = line.unwrap();
             let vec: Vec<&str> = line.split(',').collect();
-            match git2_diff(&index, vec[0], vec[1], &pool) {
-                Ok(()) => {}
-                Err(e) => println!("error: {}", e),
-            }
+            git2_diff(&index, vec[0], vec[1], &pool).unwrap();
         }
         pool.join();
         if pool.panic_count() == 0 {
@@ -417,8 +414,11 @@ fn handle_diff_line(
     index: &CrateIndex,
     pool: &ThreadPool,
 ) -> bool {
-    let path_suffix = str::from_utf8(line.content()).unwrap();
-    let crate_path = index.path.join(path_suffix.strip_suffix('\n').unwrap());
+    let path_suffix = str::from_utf8(line.content()).unwrap().strip_suffix('\n').unwrap();
+    if path_suffix.eq("config.json") {
+        return true
+    }
+    let crate_path = index.path.join(path_suffix);
     match File::open(&crate_path) {
         Ok(f) => {
             let buffered = BufReader::new(f);
@@ -441,7 +441,7 @@ fn handle_diff_line(
         },
         Err(err) => match err.kind() {
             ErrorKind::NotFound => {
-                println!("This file might have been removed from crates-io:{}", &crate_path.display());
+                println!("This file might have been removed from crates.io:{}", &crate_path.display());
             }
             other_error => panic!("something wrong while open the crates file: {}", other_error),
         }

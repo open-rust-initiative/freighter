@@ -15,6 +15,7 @@
 /// - [ ] 7. Add a flag for `enable` or `disable` the progress bar
 /// - [ ] 8. Change the test index git repo with local git repository for test performance
 
+use chrono::Utc;
 use git2::build::{CheckoutBuilder, RepoBuilder};
 use git2::{FetchOptions, Progress, RemoteCallbacks, Repository, ObjectType, Object, DiffFormat, DiffLine, DiffOptions, ErrorCode, Oid};
 
@@ -219,8 +220,12 @@ impl CrateIndex {
     }
 
     /// save commit record in record.cache, it will write from first commit to current commit if command is git clone
-    pub fn generate_commit_record (&self, start_commit_id: &Oid, end_commit_id: &Oid)  {
-        let file_name = &self.pull_record.join(CrateIndex::RECORD_NAME);
+    pub fn generate_commit_record (&self, start_commit_id: &Oid, end_commit_id: &Oid) {
+        let now = Utc::now();
+        let mut file_name = now.date().to_string();
+        file_name.push('-');
+        file_name.push_str(CrateIndex::RECORD_NAME);
+        let file_name = &self.pull_record.join(file_name);
         let mut f = match OpenOptions::new().write(true).append(true).open(file_name) {
             Ok(f) => f,
             Err(err) => match err.kind() {
@@ -233,7 +238,7 @@ impl CrateIndex {
         };
         // save record commit id only id does not matches
         if start_commit_id != end_commit_id {
-            writeln!(f, "{}", format!("{},{}", start_commit_id, end_commit_id)).unwrap();
+            writeln!(f, "{}", format!("{},{},{}", start_commit_id, end_commit_id, now.timestamp())).unwrap();
         }
     }
 
@@ -364,21 +369,33 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
     if opts.init {
         index.full_downloads().unwrap();
     } else {
-        let file_name = &index.pull_record.join(CrateIndex::RECORD_NAME);
-        let mut input = OpenOptions::new().read(true).write(true).open(file_name).unwrap();
+        let mut file_name = Utc::now().date().to_string();
+        file_name.push('-');
+        file_name.push_str(CrateIndex::RECORD_NAME);
+        let file_name = &index.pull_record.join(file_name);
+        println!("{:?}", file_name);
+        let mut input = match OpenOptions::new().read(true).write(true).open(file_name) {
+            Ok(f) => f,
+            Err(err) => match err.kind() {
+                ErrorKind::NotFound => {
+                    panic!("Did you forget to run freighter sync pull brfore download?")
+                }
+                other_error => panic!("something wrong: {}", other_error),
+            }
+        };
         let buffered = BufReader::new(&mut input);
         println!("crates.io-index modified:");
         let pool = ThreadPool::new(index.thread_count);
-        for line in buffered.lines() {
-            let line = line.unwrap();
+
+        // get last line of record file
+        let mut lines: Vec<_> = buffered.lines().map(|line| { line.unwrap() }).collect();
+        lines.reverse();
+        for line in lines.iter() {
             let vec: Vec<&str> = line.split(',').collect();
             git2_diff(&index, vec[0], vec[1], &pool).unwrap();
+            break;
         }
         pool.join();
-        if pool.panic_count() == 0 {
-            // empty file
-            File::create(file_name).unwrap();
-        }
     }
 
     Ok(())
@@ -679,15 +696,20 @@ pub fn download_file(upload: bool, c:(&str, &str, &str), folder: &str, filename:
             let mut out = File::create(p).unwrap();
             io::copy(&mut resp, &mut out).unwrap();
 
-            println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);                
+            println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);
+            upload_file(upload, file, folder, filename);
         }
     } else {
         let mut resp = reqwest::blocking::get(url).unwrap();
         let mut out = File::create(&file).unwrap();
         io::copy(&mut resp, &mut out).unwrap();
-        println!("&&&[NEW] \t\t {:?}", out);            
+        println!("&&&[NEW] \t\t {:?}", out);
+        upload_file(upload, file, folder, filename);    
     }
+}
 
+
+pub fn upload_file(upload:bool, file: &str, folder: &str, filename: &str) {
     // cargo download url is https://crates.rust-lang.pub/crates/{name}/{version}/download
     //
 
@@ -700,7 +722,7 @@ pub fn download_file(upload: bool, c:(&str, &str, &str), folder: &str, filename:
     if upload {
         std::process::Command::new("s3cmd")
         .arg("put")
-        .arg(&file)
+        .arg(file)
         .arg(format!("s3://rust-lang/crates/{}/{}", folder, filename))
         .arg("--acl-public")
         .output()

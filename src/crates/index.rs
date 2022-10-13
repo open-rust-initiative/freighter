@@ -29,6 +29,7 @@ use std::cell::RefCell;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, BufRead, Write, ErrorKind};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, Arc};
 use threadpool::ThreadPool;
 use std::str;
 
@@ -44,7 +45,7 @@ pub struct CrateIndex {
     pub path: PathBuf,
     //download crates path
     pub crates_path: PathBuf,
-    pub pull_record: PathBuf,
+    pub log_path: PathBuf,
     pub thread_count: usize,
     // upload file after download
     pub upload: bool
@@ -73,6 +74,7 @@ impl CrateIndex {
     /// default crate registry
     pub const CRATE_REGISTRY: [&'static str; 3] = ["https://github.com/rust-lang/crates.io-index.git","",""];
     pub const RECORD_NAME: &'static str = "record.cache";
+    pub const ERROR_CRATES: &'static str = "error-crates.cache";
     // use default branch master
     pub const REMOTE_BRANCH: &'static str = "master";
     // use default name origin
@@ -85,7 +87,7 @@ impl Default for CrateIndex {
             url: Url::parse(CrateIndex::CRATE_REGISTRY[0]).unwrap(),
             path: dirs::home_dir().unwrap().join(".freighter/crates.io-index"),
             crates_path: dirs::home_dir().unwrap().join(".freighter/crates"),
-            pull_record: dirs::home_dir().unwrap().join(".freighter/log"),
+            log_path: dirs::home_dir().unwrap().join(".freighter/log"),
             thread_count: 16,
             upload: false,
         }
@@ -220,17 +222,17 @@ impl CrateIndex {
     }
 
     /// save commit record in record.cache, it will write from first commit to current commit if command is git clone
-    pub fn generate_commit_record (&self, start_commit_id: &Oid, end_commit_id: &Oid) {
+    pub fn generate_commit_record(&self, start_commit_id: &Oid, end_commit_id: &Oid) {
         let now = Utc::now();
         let mut file_name = now.date().to_string();
         file_name.push('-');
         file_name.push_str(CrateIndex::RECORD_NAME);
-        let file_name = &self.pull_record.join(file_name);
+        let file_name = &self.log_path.join(file_name);
         let mut f = match OpenOptions::new().write(true).append(true).open(file_name) {
             Ok(f) => f,
             Err(err) => match err.kind() {
                 ErrorKind::NotFound => {
-                    fs::create_dir_all(&self.pull_record).unwrap();
+                    fs::create_dir_all(&self.log_path).unwrap();
                     File::create(file_name).unwrap()
                 }
                 other_error => panic!("something wrong: {}", other_error),
@@ -270,6 +272,7 @@ impl CrateIndex {
                 if x.file_type().is_file() && x.path().extension().unwrap_or_default() != "json" {
                     let input = File::open(x.path()).unwrap();
                     let buffered = BufReader::new(input);
+                    let err_record = open_file_with_lock(&self.log_path);
 
                     for line in buffered.lines() {
                         let line = line.unwrap();
@@ -283,8 +286,16 @@ impl CrateIndex {
                             fs::create_dir_all(&folder).unwrap();
                         }
                         let upload = self.upload;
+                        let err_record = Arc::clone(&err_record);
                         pool.execute(move|| {
-                            download_file(upload, (&url, file.to_str().unwrap(), &c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str());
+                            match download_file(upload, (&url, file.to_str().unwrap(), &c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str()) {
+                                Ok(_) => (),
+                                Err(err) => {
+                                    let mut err_file = err_record.lock().unwrap();
+                                    writeln!(err_file, "{}", format!("{}", format!("{}-{}.crate", &c.name, &c.vers).as_str())).unwrap();
+                                    println!("{:?}", err);
+                                }
+                            }
                         });
                     }
                 }
@@ -369,19 +380,18 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
     if opts.init {
         index.full_downloads().unwrap();
     } else {
-        let mut file_name = Utc::now().date().to_string();
-        file_name.push('-');
-        file_name.push_str(CrateIndex::RECORD_NAME);
-        let file_name = &index.pull_record.join(file_name);
-        println!("{:?}", file_name);
-        let mut input = match OpenOptions::new().read(true).write(true).open(file_name) {
-            Ok(f) => f,
-            Err(err) => match err.kind() {
-                ErrorKind::NotFound => {
-                    panic!("Did you forget to run freighter sync pull brfore download?")
+        let it = WalkDir::new(&index.log_path).into_iter()
+        .filter_entry(|e| e.file_name().to_str().unwrap().contains("record") || e.file_type().is_dir())
+        .filter_map(|v| v.ok());
+        let mut input = match it.last() {
+            Some(dir) => {
+                if dir.file_type().is_file() {
+                    OpenOptions::new().read(true).write(true).open(dir.path()).unwrap()
+                } else {
+                    panic!("Cannot get record file, run freighter sync pull before download")
                 }
-                other_error => panic!("something wrong: {}", other_error),
-            }
+            },
+            None => panic!("Did you forget to run freighter sync pull before download?"),
         };
         let buffered = BufReader::new(&mut input);
         println!("crates.io-index modified:");
@@ -392,6 +402,7 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
         lines.reverse();
         for line in lines.iter() {
             let vec: Vec<&str> = line.split(',').collect();
+            println!("{:?}", line);
             git2_diff(&index, vec[0], vec[1], &pool).unwrap();
             break;
         }
@@ -439,6 +450,7 @@ fn handle_diff_line(
     match File::open(&crate_path) {
         Ok(f) => {
             let buffered = BufReader::new(f);
+            let err_record = open_file_with_lock(&index.log_path);
             for line in buffered.lines() {
                 let line = line.unwrap();
                 let c: Crate = serde_json::from_str(&line).unwrap();
@@ -451,8 +463,16 @@ fn handle_diff_line(
                     fs::create_dir_all(&folder).unwrap();
                 }
                 let upload = index.upload;
-                pool.execute(move|| {
-                    download_file(upload, (&url, file.to_str().unwrap(), &c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str());
+                let err_record = Arc::clone(&err_record);
+                pool.execute(move || {
+                    match download_file(upload, (&url, file.to_str().unwrap(), &c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str()) {
+                        Ok(_) => (),
+                        Err(err) => {
+                            let mut err_file = err_record.lock().unwrap();
+                            writeln!(err_file, "{}", format!("{}", format!("{}-{}.crate", &c.name, &c.vers).as_str())).unwrap();
+                            println!("{:?}", err);
+                        }
+                    }
                 });
             }
         },
@@ -465,6 +485,21 @@ fn handle_diff_line(
     };
 
     true
+}
+
+/// open error record file with lock
+pub fn open_file_with_lock(log_path: &PathBuf) -> Arc<Mutex<File>> {
+    let file_name = log_path.join(CrateIndex::ERROR_CRATES);
+    let err_record = match OpenOptions::new().write(true).append(true).open(&file_name) {
+        Ok(f) => Arc::new(Mutex::new(f)),
+        Err(err) => match err.kind() {
+            ErrorKind::NotFound => {
+                Arc::new(Mutex::new(File::create(&file_name).unwrap()))
+            }
+            other_error => panic!("something wrong: {}", other_error),
+        }
+    };
+    err_record
 }
 
 /// ### References Codes
@@ -673,14 +708,14 @@ fn do_merge<'a>(
     Ok(())
 }
 
-pub fn download_file(upload: bool, c:(&str, &str, &str), folder: &str, filename: &str) {
+pub fn download_file(upload: bool, c:(&str, &str, &str), folder: &str, filename: &str) -> FreightResult {
     let (url, file, check_sum) = c;
     let p = Path::new(&file);
 
     if p.is_file() && p.exists() {
         let mut hasher = Sha256::new();
-        let mut f = File::open(p).unwrap();
-        io::copy(&mut f, &mut hasher).unwrap();
+        let mut f = File::open(p)?;
+        io::copy(&mut f, &mut hasher)?;
         let result = hasher.finalize();
         let hex = format!("{:x}", result);
 
@@ -690,22 +725,23 @@ pub fn download_file(upload: bool, c:(&str, &str, &str), folder: &str, filename:
             let p = Path::new(&file);
 
             println!("!!![REMOVE] \t\t {:?} !", f);
-            fs::remove_file(p).unwrap();
+            fs::remove_file(p)?;
 
-            let mut resp = reqwest::blocking::get(url).unwrap();
-            let mut out = File::create(p).unwrap();
-            io::copy(&mut resp, &mut out).unwrap();
+            let mut resp = reqwest::blocking::get(url)?;
+            let mut out = File::create(p)?;
+            io::copy(&mut resp, &mut out)?;
 
             println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);
             upload_file(upload, file, folder, filename);
         }
     } else {
-        let mut resp = reqwest::blocking::get(url).unwrap();
-        let mut out = File::create(&file).unwrap();
-        io::copy(&mut resp, &mut out).unwrap();
+        let mut resp = reqwest::blocking::get(url)?;
+        let mut out = File::create(file)?;
+        io::copy(&mut resp, &mut out)?;
         println!("&&&[NEW] \t\t {:?}", out);
         upload_file(upload, file, folder, filename);    
     }
+    Ok(())
 }
 
 

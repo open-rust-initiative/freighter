@@ -79,3 +79,11 @@ impl From<walkdir::Error> for FreighterError {
         FreighterError::new(err.into(), 1)
     }
 }
+
+///
+///
+impl From<reqwest::Error> for FreighterError {
+    fn from(err: reqwest::Error) -> FreighterError {
+        FreighterError::new(err.into(), 1)
+    }
+}

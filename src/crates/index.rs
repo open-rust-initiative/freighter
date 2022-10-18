@@ -264,6 +264,7 @@ impl CrateIndex {
     /// ```
     pub fn full_downloads(&self) -> FreightResult {
         let pool = ThreadPool::new(self.thread_count);
+        let err_record = open_file_with_mutex(&self.log_path);
         
         WalkDir::new(self.path()).into_iter()
             .filter_entry(|e| self.is_not_hidden(e))
@@ -272,12 +273,10 @@ impl CrateIndex {
                 if x.file_type().is_file() && x.path().extension().unwrap_or_default() != "json" {
                     let input = File::open(x.path()).unwrap();
                     let buffered = BufReader::new(input);
-                    let err_record = open_file_with_lock(&self.log_path);
 
                     for line in buffered.lines() {
                         let line = line.unwrap();
                         let c: Crate = serde_json::from_str(&line).unwrap();
-
                         let url = format!("https://static.crates.io/crates/{}/{}-{}.crate", &c.name, &c.name, &c.vers);
                         let folder = self.crates_path.join(&c.name);
                         let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
@@ -396,14 +395,14 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
         let buffered = BufReader::new(&mut input);
         println!("crates.io-index modified:");
         let pool = ThreadPool::new(index.thread_count);
-
+        let err_record = open_file_with_mutex(&index.log_path);
         // get last line of record file
         let mut lines: Vec<_> = buffered.lines().map(|line| { line.unwrap() }).collect();
         lines.reverse();
         for line in lines.iter() {
             let vec: Vec<&str> = line.split(',').collect();
             println!("{:?}", line);
-            git2_diff(&index, vec[0], vec[1], &pool).unwrap();
+            git2_diff(&index, vec[0], vec[1], &pool, err_record).unwrap();
             break;
         }
         pool.join();
@@ -426,13 +425,13 @@ pub fn get_repo(path: PathBuf) -> Repository {
     }
 }
 
-pub fn git2_diff(index: &CrateIndex, from_oid: &str, to_oid: &str, pool: &ThreadPool) -> Result<(), anyhow::Error>{
+pub fn git2_diff(index: &CrateIndex, from_oid: &str, to_oid: &str, pool: &ThreadPool, file: Arc<Mutex<File>>) -> Result<(), anyhow::Error>{
     let repo = get_repo(index.path.clone());
     let t1 = tree_to_treeish(&repo, from_oid)?;
     let t2 = tree_to_treeish(&repo, to_oid)?;
     let mut opts = DiffOptions::new();
     let diff = repo.diff_tree_to_tree(t1.unwrap().as_tree(), t2.unwrap().as_tree(), Some(&mut opts))?;
-    diff.print(DiffFormat::NameOnly, |_d, _h, l| handle_diff_line(l, index, pool))?;
+    diff.print(DiffFormat::NameOnly, |_d, _h, l| handle_diff_line(l, index, pool, &file))?;
     Ok(())
 }
 
@@ -441,6 +440,7 @@ fn handle_diff_line(
     line: DiffLine,
     index: &CrateIndex,
     pool: &ThreadPool,
+    err_record: &Arc<Mutex<File>>
 ) -> bool {
     let path_suffix = str::from_utf8(line.content()).unwrap().strip_suffix('\n').unwrap();
     if path_suffix.eq("config.json") {
@@ -450,7 +450,7 @@ fn handle_diff_line(
     match File::open(&crate_path) {
         Ok(f) => {
             let buffered = BufReader::new(f);
-            let err_record = open_file_with_lock(&index.log_path);
+
             for line in buffered.lines() {
                 let line = line.unwrap();
                 let c: Crate = serde_json::from_str(&line).unwrap();
@@ -487,8 +487,8 @@ fn handle_diff_line(
     true
 }
 
-/// open error record file with lock
-pub fn open_file_with_lock(log_path: &PathBuf) -> Arc<Mutex<File>> {
+/// open error record file with Mutex
+pub fn open_file_with_mutex(log_path: &PathBuf) -> Arc<Mutex<File>> {
     let file_name = log_path.join(CrateIndex::ERROR_CRATES);
     let err_record = match OpenOptions::new().write(true).append(true).open(&file_name) {
         Ok(f) => Arc::new(Mutex::new(f)),

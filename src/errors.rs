@@ -34,6 +34,13 @@ impl FreighterError {
         }
     }
 
+    pub fn code(code: i32) -> FreighterError {
+        FreighterError {
+            error: None,
+            code: code,
+        }
+    }
+
     pub fn print(&self) {
         println!("{}", self.error.as_ref().unwrap());
     }

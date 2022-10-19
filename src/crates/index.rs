@@ -33,7 +33,7 @@ use std::sync::{Mutex, Arc};
 use threadpool::ThreadPool;
 use std::str;
 
-use crate::errors::{FreightResult};
+use crate::errors::{FreightResult, FreighterError};
 
 /// `CrateIndex` is a wrapper `Git Repository` that crates-io index.
 ///
@@ -155,7 +155,7 @@ impl CrateIndex {
     }
 
     /// Check the destination path is a git repository and pull
-    pub fn pull(&self, opts: &SyncOptions) -> FreightResult {
+    pub fn git_pull(&self, opts: &SyncOptions) -> FreightResult {
 
         let repo = get_repo(self.path.clone());
         
@@ -176,7 +176,7 @@ impl CrateIndex {
     /// Clone the `CrateIndex` to a local directory.
     ///
     ///
-    pub fn clone(&self, opts: &mut SyncOptions) -> FreightResult {
+    pub fn git_clone(&self, opts: &mut SyncOptions) -> FreightResult {
         println!("Starting git clone...");
         let state = RefCell::new(State {
             progress: None,
@@ -291,7 +291,7 @@ impl CrateIndex {
                                 Ok(_) => (),
                                 Err(err) => {
                                     let mut err_file = err_record.lock().unwrap();
-                                    writeln!(err_file, "{}", format!("{}", format!("{}-{}.crate", &c.name, &c.vers).as_str())).unwrap();
+                                    writeln!(err_file, "{}", format!("{}", format!("{}-{}.crate, {}", &c.name, &c.vers, Utc::now().timestamp()).as_str())).unwrap();
                                     println!("{:?}", err);
                                 }
                             }
@@ -367,9 +367,9 @@ pub fn pull(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
         println!("no-progressbar has been set to true, it will not be displayed!");
     }
     if Path::new(index.path.as_path()).exists() {
-        index.pull(opts).unwrap();
+        index.git_pull(opts).unwrap();
     } else {
-        index.clone(opts).unwrap();
+        index.git_clone(opts).unwrap();
     }
     Ok(())
 }
@@ -469,7 +469,7 @@ fn handle_diff_line(
                         Ok(_) => (),
                         Err(err) => {
                             let mut err_file = err_record.lock().unwrap();
-                            writeln!(err_file, "{}", format!("{}", format!("{}-{}.crate", &c.name, &c.vers).as_str())).unwrap();
+                            writeln!(err_file, "{}", format!("{}", format!("{}-{}.crate, {}", &c.name, &c.vers, Utc::now().timestamp()).as_str())).unwrap();
                             println!("{:?}", err);
                         }
                     }
@@ -721,6 +721,7 @@ pub fn download_file(upload: bool, c:(&str, &str, &str), folder: &str, filename:
 
         if hex == check_sum {
             println!("###[ALREADY] \t{:?}", f);
+            Ok(())
         } else {
             let p = Path::new(&file);
 
@@ -732,20 +733,19 @@ pub fn download_file(upload: bool, c:(&str, &str, &str), folder: &str, filename:
             io::copy(&mut resp, &mut out)?;
 
             println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);
-            upload_file(upload, file, folder, filename);
+            Ok(upload_file(upload, file, folder, filename)?)
         }
     } else {
         let mut resp = reqwest::blocking::get(url)?;
         let mut out = File::create(file)?;
         io::copy(&mut resp, &mut out)?;
         println!("&&&[NEW] \t\t {:?}", out);
-        upload_file(upload, file, folder, filename);    
+        Ok(upload_file(upload, file, folder, filename)?)
     }
-    Ok(())
 }
 
 
-pub fn upload_file(upload:bool, file: &str, folder: &str, filename: &str) {
+pub fn upload_file(upload:bool, file: &str, folder: &str, filename: &str) -> FreightResult {
     // cargo download url is https://crates.rust-lang.pub/crates/{name}/{version}/download
     //
 
@@ -756,14 +756,18 @@ pub fn upload_file(upload:bool, file: &str, folder: &str, filename: &str) {
     // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic --guess-mime-type
     // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic --guess-mime-type --add-header="Content-Type: application/octet-stream"
     if upload {
-        std::process::Command::new("s3cmd")
+        let status = std::process::Command::new("s3cmd")
         .arg("put")
         .arg(file)
         .arg(format!("s3://rust-lang/crates/{}/{}", folder, filename))
         .arg("--acl-public")
-        .output()
+        .status()
         .expect("failed to execute process");
+        if !status.success() {
+            return Err(FreighterError::code(status.code().unwrap()));
+        }
     }
+    Ok(())
 }
 
 #[cfg(test)]

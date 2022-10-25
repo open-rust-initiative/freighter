@@ -52,16 +52,19 @@ jobs:
   build:
     runs-on: ubuntu-latest      
     steps:
-    - name: Install doctl
-      uses: digitalocean/action-doctl@v2
-      with:
-        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - name: Checkout sources
+        uses: actions/checkout@v2
 
-    - name: Build container image
-      run: docker build -t ${{ secrets.REGISTRY_NAME }}/freighter:latest .
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
-    - name: Log in to DigitalOcean Container Registry with short-lived credentials
-      run: doctl registry login --expiry-seconds 1200
+      - name: Build container image
+        run: docker build -t ${{ secrets.REGISTRY_NAME }}/freighter:latest .
 
-    - name: Push image to DigitalOcean Container Registry
-      run: docker push ${{ secrets.REGISTRY_NAME }}/freighter:latest
+      - name: Log in to DigitalOcean Container Registry with short-lived credentials
+        run: doctl registry login --expiry-seconds 1200
+
+      - name: Push image to DigitalOcean Container Registry
+        run: docker push ${{ secrets.REGISTRY_NAME }}/freighter:latest

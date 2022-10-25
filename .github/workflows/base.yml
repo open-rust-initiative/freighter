@@ -3,7 +3,10 @@
 #
 #
 #
-
+env:
+  # origin image, debian
+  IMAGE_TYPE: debian
+  
 on: [push, pull_request]
 
 name: Base
@@ -61,10 +64,10 @@ jobs:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
       - name: Build container image
-        run: docker build -t ${{ secrets.REGISTRY_NAME }}/freighter:latest .
+        run: docker build -t ${{ secrets.REGISTRY_NAME }}/freighter:${{ env.IMAGE_TYPE }} -f Dockerfile.${{ env.IMAGE_TYPE }} .
 
       - name: Log in to DigitalOcean Container Registry with short-lived credentials
         run: doctl registry login --expiry-seconds 1200
 
       - name: Push image to DigitalOcean Container Registry
-        run: docker push ${{ secrets.REGISTRY_NAME }}/freighter:latest
+        run: docker push ${{ secrets.REGISTRY_NAME }}/freighter:${{ env.IMAGE_TYPE }}

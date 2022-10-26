@@ -86,9 +86,9 @@ impl Default for CrateIndex {
         let home_path = dirs::home_dir().unwrap();
         CrateIndex {
             url: Url::parse(CrateIndex::CRATE_REGISTRY[0]).unwrap(),
-            path: home_path.join(".freighter/crates.io-index"),
-            crates_path: home_path.join(".freighter/crates"),
-            log_path: home_path.join(".freighter/log"),
+            path: home_path.join("freighter/crates.io-index"),
+            crates_path: home_path.join("freighter/crates"),
+            log_path: home_path.join("freighter/log"),
             thread_count: 16,
             upload: false,
         }
@@ -148,9 +148,9 @@ impl CrateIndex {
     /// Create a new `CrateIndex` from a `Work dir`.
     pub fn new(work_dir: PathBuf) -> Self {
         Self {
-            path: work_dir.join(".freighter/crates.io-index"),
-            crates_path: work_dir.join(".freighter/crates"),
-            log_path: work_dir.join(".freighter/log"),
+            path: work_dir.join("freighter/crates.io-index"),
+            crates_path: work_dir.join("freighter/crates"),
+            log_path: work_dir.join("freighter/log"),
             ..Default::default()}
     }
 

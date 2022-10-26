@@ -49,11 +49,7 @@ pub fn cli() -> clap::Command {
         .about("Sync the crates from the upstream(crates.io) to the local registry")
         .arg(flag("no-progressbar", "Hide progressbar when start sync"))
         .arg(
-            arg!(-i --"index-path" <FILE> "specify the download index path, default: $HOME/.freighter/crates.io-index")
-            .required(false)
-        )
-        .arg(
-            arg!(-c --"crates-path" <FILE> "specify the download crates file path, default: $HOME/.freighter/crates")
+            arg!(-c --"work-dir" <FILE> "specify the work dir, which contains crates path, index path and log path, default: $HOME/.freighter")
             .required(false)
         )
         .arg(
@@ -73,17 +69,17 @@ OPTIONS:
 {options}
 
 EXAMPLES
-1. Sync the crates index
+1. Sync the crates index with specify directory
 
-       freighter sync pull
+       freighter sync -c /mnt/volume_fra1_01 pull
 
-2. Download all crates file:
+2. Download all crates file and uoload:
 
-       freighter sync download --init
+       freighter sync download --init --upload
 
 3. Download crates file with multi-thread to specify directory:
 
-       freighter sync -t 32 -c /home/username download
+       freighter sync -t 512 -c /mnt/volume_fra1_01 download --init
 
 \n")
 }
@@ -92,17 +88,13 @@ EXAMPLES
 ///
 ///
 pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
-    let mut index = CrateIndex {
-        ..Default::default()
-    };
-
-    match args.get_one::<String>("index-path").cloned() {
-        Some(path) => index.path = PathBuf::from(path).join("crates.io-index"),
-        None => println!("use default index path: {}", index.path.display()),
-    };
-    match args.get_one::<String>("crates-path").cloned() {
-        Some(crates) => index.crates_path = PathBuf::from(crates).join("crates"),
-        None => println!("use default crates path: {}", index.crates_path.display()),
+    let mut index = match args.get_one::<String>("work-dir").cloned() {
+        Some(work_dir) => CrateIndex::new(PathBuf::from(work_dir)),
+        None => {
+            let index: CrateIndex = Default::default();
+            println!("use default crates path: {}", index.crates_path.display());
+            index
+        },
     };
 
     match args.get_one::<usize>("thread-count").cloned() {
@@ -118,7 +110,7 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
             index,
             &mut SyncOptions {
                 no_progressbar,
-                ..Default::default()
+                init: false
             },
         )?,
         Some(("download", args)) => {
@@ -128,7 +120,6 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
                 &mut SyncOptions {
                     no_progressbar,
                     init: args.get_flag("init"),
-                    ..Default::default()
                 },
             )?
         }

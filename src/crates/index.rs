@@ -83,11 +83,12 @@ impl CrateIndex {
 
 impl Default for CrateIndex {
     fn default() -> CrateIndex {
-        CrateIndex{
+        let home_path = dirs::home_dir().unwrap();
+        CrateIndex {
             url: Url::parse(CrateIndex::CRATE_REGISTRY[0]).unwrap(),
-            path: dirs::home_dir().unwrap().join(".freighter/crates.io-index"),
-            crates_path: dirs::home_dir().unwrap().join(".freighter/crates"),
-            log_path: dirs::home_dir().unwrap().join(".freighter/log"),
+            path: home_path.join(".freighter/crates.io-index"),
+            crates_path: home_path.join(".freighter/crates"),
+            log_path: home_path.join(".freighter/log"),
             thread_count: 16,
             upload: false,
         }
@@ -144,9 +145,13 @@ pub enum DependencyKind {
 ///
 ///
 impl CrateIndex {
-    /// Create a new `CrateIndex` from a `Url`.
-    pub fn new(url: Url, path: PathBuf, crates_path: PathBuf) -> Self {
-        Self {url, path, crates_path, ..Default::default()}
+    /// Create a new `CrateIndex` from a `Work dir`.
+    pub fn new(work_dir: PathBuf) -> Self {
+        Self {
+            path: work_dir.join(".freighter/crates.io-index"),
+            crates_path: work_dir.join(".freighter/crates"),
+            log_path: work_dir.join(".freighter/log"),
+            ..Default::default()}
     }
 
     /// Get the `path` of this `CrateIndex`.
@@ -777,21 +782,18 @@ mod tests {
     #[test]
     fn test_clone() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let mut crates_path = path.clone();
-        path.push("data/tests/fixtures/crates.io-index");
-        crates_path.push("data/tests/fixtures/crates");
+        path.push("data/tests/fixtures/");
 
-
-        let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path, crates_path);
+        let mut index = super::CrateIndex::new(path);
+        index.url = url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap();
     }
 
     #[test]
     fn test_downloads() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let mut crates_path = path.clone();
-        path.push("data/tests/fixtures/crates.io-index");
-        crates_path.push("data/tests/fixtures/crates");
+        path.push("data/tests/fixtures/");
 
-        let index = super::CrateIndex::new(url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(), path, crates_path);
+        let mut index = super::CrateIndex::new(path);
+        index.url = url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap();
     }
 }

@@ -371,8 +371,20 @@ pub fn pull(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
     if opts.no_progressbar {
         println!("no-progressbar has been set to true, it will not be displayed!");
     }
-    if Path::new(index.path.as_path()).exists() {
-        index.git_pull(opts).unwrap();
+    let index_dir = Path::new(index.path.as_path());
+    // try to remove index fir if it's empty
+    if index_dir.exists() {
+        if index_dir.read_dir().unwrap().filter(|e|
+            !e.as_ref().unwrap().file_name().to_str().unwrap().contains("git")).next().is_none() {
+            println!("It seems last task has been broken and {} is empty, 
+            freighter had to removed this index, and then run init", index_dir.display());
+            match fs::remove_dir(index_dir) {
+                Ok(_) => index.git_clone(opts).unwrap(),
+                Err(e) => panic!("Remove index failed, try to delete it manualy: {}", e),
+            };
+        } else {
+            index.git_pull(opts).unwrap();
+        }
     } else {
         index.git_clone(opts).unwrap();
     }
@@ -385,7 +397,7 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
         index.full_downloads().unwrap();
     } else {
         let it = WalkDir::new(&index.log_path).into_iter()
-        .filter_entry(|e| e.file_name().to_str().unwrap().contains("record") || e.file_type().is_dir())
+        .filter_entry(|e| e.file_name().to_str().unwrap().contains(&Utc::now().date().to_string()) || e.file_type().is_dir())
         .filter_map(|v| v.ok());
         let mut input = match it.last() {
             Some(dir) => {

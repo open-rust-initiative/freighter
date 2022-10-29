@@ -1,8 +1,0 @@
-FROM rust:latest AS builder
-
-WORKDIR /usr/src/freighter
-COPY . .
-
-RUN cargo install --path .
-
-CMD ["freighter"]

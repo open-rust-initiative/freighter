@@ -372,7 +372,7 @@ pub fn pull(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
         println!("no-progressbar has been set to true, it will not be displayed!");
     }
     let index_dir = Path::new(index.path.as_path());
-    // try to remove index fir if it's empty
+    // try to remove index dir if it's empty
     if index_dir.exists() {
         if index_dir.read_dir().unwrap().filter(|e|
             !e.as_ref().unwrap().file_name().to_str().unwrap().contains("git")).next().is_none() {

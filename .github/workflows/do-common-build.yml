@@ -1,0 +1,35 @@
+# Reusable workflow build docker image and push to DigitalOcean Registry
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        required: true
+        type: string
+    secrets:
+      REGISTRY_NAME:
+        required: true
+      DIGITALOCEAN_ACCESS_TOKEN:
+        required: true
+
+name: Common Reusable Build Workflow
+
+jobs:
+  do-common-build:
+    runs-on: ubuntu-latest      
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Build container image
+        run: docker build -t ${{ secrets.REGISTRY_NAME }}/${{ inputs.image-name }} .
+
+      - name: Log in to DigitalOcean Container Registry with short-lived credentials
+        run: doctl registry login --expiry-seconds 1200
+
+      - name: Push image to DigitalOcean Container Registry
+        run: docker push ${{ secrets.REGISTRY_NAME }}/${{ inputs.image-name }}

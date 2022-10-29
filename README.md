@@ -1,6 +1,6 @@
-## Freighter - A simple crates registry
+## Freighter - Crates Infrastructure for Local Development
 
-Freighter is a simple crates registry that can be used to host your own private crates. It's not a fork of [crates.io](https://crates.io), and it's not a replacement for it also.
+[Freighter](https://github.com/open-rust-initiative/freighter) is an open source project to helping build the DevOps infrastructure for proxying the [crates.io](https://crates.io) and provide simple registry functionality for local development.
 
 ### Why?
 
@@ -14,7 +14,7 @@ Usually, you don't need to host your own crate registry. When we are developing 
 
 1. Support sync crates index from crates.io.
 2. Support cache crates file from crates.io.
-3. Support publish crates to the registry.
+3. Support publish crates into the registry.
 
 ### How to use?
 

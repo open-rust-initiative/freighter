@@ -46,6 +46,8 @@ pub struct CrateIndex {
     //download crates path
     pub crates_path: PathBuf,
     pub log_path: PathBuf,
+    pub rustup_path: PathBuf,
+    pub dist_path: PathBuf,
     pub thread_count: usize,
     // upload file after download
     pub upload: bool
@@ -89,6 +91,8 @@ impl Default for CrateIndex {
             path: home_path.join("freighter/crates.io-index"),
             crates_path: home_path.join("freighter/crates"),
             log_path: home_path.join("freighter/log"),
+            rustup_path: home_path.join("freighter/rustup"),
+            dist_path: home_path.join("freighter/dist"),
             thread_count: 16,
             upload: false,
         }
@@ -292,8 +296,10 @@ impl CrateIndex {
                         let upload = self.upload;
                         let err_record = Arc::clone(&err_record);
                         pool.execute(move|| {
-                            match download_file(upload, (&url, file.to_str().unwrap(), &c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str()) {
-                                Ok(_) => (),
+                            match download_file(&url, &file, Some(&c.cksum)) {
+                                Ok(download_succ) => if download_succ && upload {
+                                    upload_file(file.to_str().unwrap(), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str()).unwrap();
+                                },
                                 Err(err) => {
                                     let mut err_file = err_record.lock().unwrap();
                                     writeln!(err_file, "{}", format!("{}", format!("{}-{}.crate, {}", &c.name, &c.vers, Utc::now().timestamp()).as_str())).unwrap();
@@ -428,6 +434,26 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
     Ok(())
 }
 
+/// sync rustup init file from static.rust-lang 
+pub fn sync_rustup_init(index: CrateIndex) -> FreightResult {
+    let domain = "https://static.rust-lang.org";
+    let download_url = format!("{}/rustup/release-stable.toml", domain);
+    
+    // these line could might move to download function
+    let folder = index.rustup_path;
+    let file = folder.join(format!("release-stable.toml"));
+    if !folder.exists() {
+        fs::create_dir_all(&folder).unwrap();
+    }
+    match download_file(&download_url, &file, None) {
+        Ok(_) => (),
+        Err(err) => {
+            println!("{:?}", err);
+        }
+    }
+    Ok(())
+}
+
 /// get repo from path
 pub fn get_repo(path: PathBuf) -> Repository {
     let path = path.to_str().unwrap_or(".");
@@ -482,8 +508,10 @@ fn handle_diff_line(
                 let upload = index.upload;
                 let err_record = Arc::clone(&err_record);
                 pool.execute(move || {
-                    match download_file(upload, (&url, file.to_str().unwrap(), &c.cksum), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str()) {
-                        Ok(_) => (),
+                    match download_file(&url, &file, Some(&c.cksum)) {
+                        Ok(download_succ) => if download_succ && upload {
+                            upload_file(file.to_str().unwrap(), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str()).unwrap();
+                        },
                         Err(err) => {
                             let mut err_file = err_record.lock().unwrap();
                             writeln!(err_file, "{}", format!("{}", format!("{}-{}.crate, {}", &c.name, &c.vers, Utc::now().timestamp()).as_str())).unwrap();
@@ -725,44 +753,43 @@ fn do_merge<'a>(
     Ok(())
 }
 
-pub fn download_file(upload: bool, c:(&str, &str, &str), folder: &str, filename: &str) -> FreightResult {
-    let (url, file, check_sum) = c;
-    let p = Path::new(&file);
-
-    if p.is_file() && p.exists() {
+/// download file from remote and calculate it's hash, return true if download and success
+pub fn download_file(url: &str, path: &Path, check_sum: Option<&str>) -> Result<bool, FreighterError> {
+    if path.is_file() && path.exists() {
         let mut hasher = Sha256::new();
-        let mut f = File::open(p)?;
+        let mut f = File::open(path)?;
         io::copy(&mut f, &mut hasher)?;
         let result = hasher.finalize();
         let hex = format!("{:x}", result);
 
-        if hex == check_sum {
-            println!("###[ALREADY] \t{:?}", f);
-            Ok(())
+        //if need to calculate hash
+        if check_sum.is_some() {
+            if hex == check_sum.unwrap() {
+                println!("###[ALREADY] \t{:?}", f);
+                return Ok(false);
+            } else {
+                println!("!!![REMOVE] \t\t {:?} !", f);
+                fs::remove_file(path)?;
+                let mut resp = reqwest::blocking::get(url)?;
+                let mut out = File::create(path)?;
+                io::copy(&mut resp, &mut out)?;
+                println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);
+            }
         } else {
-            let p = Path::new(&file);
-
-            println!("!!![REMOVE] \t\t {:?} !", f);
-            fs::remove_file(p)?;
-
-            let mut resp = reqwest::blocking::get(url)?;
-            let mut out = File::create(p)?;
-            io::copy(&mut resp, &mut out)?;
-
-            println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);
-            Ok(upload_file(upload, file, folder, filename)?)
+            println!("file exist but not pass check_sum, skiping download {}", path.display())
         }
     } else {
+        println!("{}", url);
         let mut resp = reqwest::blocking::get(url)?;
-        let mut out = File::create(file)?;
-        io::copy(&mut resp, &mut out)?;
+        let mut out = File::create(path).unwrap();
+        io::copy(&mut resp, &mut out).unwrap();
         println!("&&&[NEW] \t\t {:?}", out);
-        Ok(upload_file(upload, file, folder, filename)?)
     }
+    Ok(true)
 }
 
-
-pub fn upload_file(upload:bool, file: &str, folder: &str, filename: &str) -> FreightResult {
+/// upload file to s3
+pub fn upload_file(file: &str, folder: &str, filename: &str) -> FreightResult {
     // cargo download url is https://crates.rust-lang.pub/crates/{name}/{version}/download
     //
 
@@ -772,17 +799,15 @@ pub fn upload_file(upload:bool, file: &str, folder: &str, filename: &str) -> Fre
     // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic
     // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic --guess-mime-type
     // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic --guess-mime-type --add-header="Content-Type: application/octet-stream"
-    if upload {
-        let status = std::process::Command::new("s3cmd")
+    let status = std::process::Command::new("s3cmd")
         .arg("put")
         .arg(file)
         .arg(format!("s3://rust-lang/crates/{}/{}", folder, filename))
         .arg("--acl-public")
         .status()
         .expect("failed to execute process");
-        if !status.success() {
-            return Err(FreighterError::code(status.code().unwrap()));
-        }
+    if !status.success() {
+        return Err(FreighterError::code(status.code().unwrap()));
     }
     Ok(())
 }

@@ -30,7 +30,7 @@ use clap::{arg, ArgMatches};
 
 use crate::config::Config;
 use crate::crates::command_prelude::*;
-use crate::crates::index::{download, pull, CrateIndex, SyncOptions};
+use crate::crates::index::{download, pull, sync_rustup_init, CrateIndex, SyncOptions};
 use crate::errors::FreightResult;
 
 /// The __sync__ subcommand
@@ -40,6 +40,7 @@ pub fn cli() -> clap::Command {
 
     clap::Command::new("sync")
         .subcommand(subcommand("pull"))
+        .subcommand(subcommand("rustup"))
         .subcommand(subcommand("download")
             .arg(flag("init", "Start init download of crates file, this will traverse all index for full download"))
             .arg(flag("upload", "upload file after download"))
@@ -122,6 +123,9 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
                     init: args.get_flag("init"),
                 },
             )?
+        }
+        Some(("rustup", _)) => {
+            sync_rustup_init(index)?
         }
         Some((cmd, _)) => {
             unreachable!("unexpected command {}", cmd)

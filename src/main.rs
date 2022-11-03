@@ -10,6 +10,7 @@ mod config;
 mod errors;
 mod commands;
 mod crates;
+mod download;
 
 ///
 /// Main entry point for the [Freighter](https://github.com/open-rust-initiative/freighter) application.

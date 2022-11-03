@@ -30,6 +30,7 @@ sha2 = "0.10.5"
 sea-orm = { version = "0.10.1", features = [ "sqlx-mysql", "runtime-tokio-rustls", "macros" ] }
 threadpool = "1.8.1"
 dirs = "4.0.0"
+toml = "0.5.8"
 
 
 [dev-dependencies]

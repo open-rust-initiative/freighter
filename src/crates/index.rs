@@ -27,7 +27,7 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::cell::RefCell;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufReader, BufRead, Write, ErrorKind};
+use std::io::{self, BufReader, BufRead, Write, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, Arc};
 use threadpool::ThreadPool;
@@ -74,13 +74,103 @@ pub struct SyncOptions {
 
 impl CrateIndex {
     /// default crate registry
-    pub const CRATE_REGISTRY: [&'static str; 3] = ["https://github.com/rust-lang/crates.io-index.git","",""];
-    pub const RECORD_NAME: &'static str = "record.cache";
-    pub const ERROR_CRATES: &'static str = "error-crates.cache";
+    const CRATE_REGISTRY: [&str; 3] = ["https://github.com/rust-lang/crates.io-index.git","",""];
+    const RECORD_NAME: &str = "record.cache";
+    const ERROR_CRATES: &str = "error-crates.cache";
     // use default branch master
-    pub const REMOTE_BRANCH: &'static str = "master";
+    const REMOTE_BRANCH: &str = "master";
     // use default name origin
-    pub const REMOTE_NAME: &'static str = "origin";
+    const REMOTE_NAME: &str = "origin";
+    const RUSTUP_MIRROR: &str = "https://static.rust-lang.org";
+    //rustup platforms arr
+    const PLATFORMS: [&str; 86] = [
+        "aarch64-apple-darwin",
+        "aarch64-apple-ios",
+        "aarch64-apple-ios-sim",
+        "aarch64-fuchsia",
+        "aarch64-linux-android",
+        "aarch64-pc-windows-msvc",
+        "aarch64-unknown-linux-gnu",
+        "aarch64-unknown-linux-musl",
+        "aarch64-unknown-none",
+        "aarch64-unknown-none-softfloat",
+        "armebv7r-none-eabi",
+        "armebv7r-none-eabihf",
+        "arm-linux-androideabi",
+        "arm-unknown-linux-gnueabi",
+        "arm-unknown-linux-gnueabihf",
+        "arm-unknown-linux-musleabi",
+        "arm-unknown-linux-musleabihf",
+        "armv5te-unknown-linux-gnueabi",
+        "armv5te-unknown-linux-musleabi",
+        "armv7a-none-eabi",
+        "armv7-linux-androideabi",
+        "armv7r-none-eabi",
+        "armv7r-none-eabihf",
+        "armv7-unknown-linux-gnueabi",
+        "armv7-unknown-linux-gnueabihf",
+        "armv7-unknown-linux-musleabi",
+        "armv7-unknown-linux-musleabihf",
+        "asmjs-unknown-emscripten",
+        "i586-pc-windows-msvc",
+        "i586-unknown-linux-gnu",
+        "i586-unknown-linux-musl",
+        "i686-linux-android",
+        "i686-pc-windows-gnu",
+        "i686-pc-windows-msvc",
+        "i686-unknown-freebsd",
+        "i686-unknown-linux-gnu",
+        "i686-unknown-linux-musl",
+        "mips64el-unknown-linux-gnuabi64",
+        "mips64el-unknown-linux-muslabi64",
+        "mips64-unknown-linux-gnuabi64",
+        "mips64-unknown-linux-muslabi64",
+        "mipsel-unknown-linux-gnu",
+        "mipsel-unknown-linux-musl",
+        "mips-unknown-linux-gnu",
+        "mips-unknown-linux-musl",
+        "nvptx64-nvidia-cuda",
+        "powerpc64le-unknown-linux-gnu",
+        "powerpc64-unknown-linux-gnu",
+        "powerpc-unknown-linux-gnu",
+        "riscv32imac-unknown-none-elf",
+        "riscv32imc-unknown-none-elf",
+        "riscv32i-unknown-none-elf",
+        "riscv64gc-unknown-linux-gnu",
+        "riscv64gc-unknown-none-elf",
+        "riscv64imac-unknown-none-elf",
+        "s390x-unknown-linux-gnu",
+        "sparc64-unknown-linux-gnu",
+        "sparcv9-sun-solaris",
+        "thumbv6m-none-eabi",
+        "thumbv7em-none-eabi",
+        "thumbv7em-none-eabihf",
+        "thumbv7m-none-eabi",
+        "thumbv7neon-linux-androideabi",
+        "thumbv7neon-unknown-linux-gnueabihf",
+        "thumbv8m.base-none-eabi",
+        "thumbv8m.main-none-eabi",
+        "thumbv8m.main-none-eabihf",
+        "wasm32-unknown-emscripten",
+        "wasm32-unknown-unknown",
+        "wasm32-wasi",
+        "x86_64-apple-darwin",
+        "x86_64-apple-ios",
+        "x86_64-fortanix-unknown-sgx",
+        "x86_64-fuchsia",
+        "x86_64-linux-android",
+        "x86_64-pc-solaris",
+        "x86_64-pc-windows-gnu",
+        "x86_64-pc-windows-msvc",
+        "x86_64-sun-solaris",
+        "x86_64-unknown-freebsd",
+        "x86_64-unknown-illumos",
+        "x86_64-unknown-linux-gnu",
+        "x86_64-unknown-linux-gnux32",
+        "x86_64-unknown-linux-musl",
+        "x86_64-unknown-netbsd",
+        "x86_64-unknown-redox",
+    ];
 }
 
 impl Default for CrateIndex {
@@ -296,7 +386,7 @@ impl CrateIndex {
                         let upload = self.upload;
                         let err_record = Arc::clone(&err_record);
                         pool.execute(move|| {
-                            match download_file(&url, &file, Some(&c.cksum)) {
+                            match download_file(&url, &file, Some(&c.cksum), false) {
                                 Ok(download_succ) => if download_succ && upload {
                                     upload_file(file.to_str().unwrap(), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str()).unwrap();
                                 },
@@ -436,21 +526,25 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
 
 /// sync rustup init file from static.rust-lang 
 pub fn sync_rustup_init(index: CrateIndex) -> FreightResult {
-    let domain = "https://static.rust-lang.org";
-    let download_url = format!("{}/rustup/release-stable.toml", domain);
-    
-    // these line could might move to download function
-    let folder = index.rustup_path;
-    let file = folder.join(format!("release-stable.toml"));
-    if !folder.exists() {
-        fs::create_dir_all(&folder).unwrap();
-    }
-    match download_file(&download_url, &file, None) {
-        Ok(_) => (),
-        Err(err) => {
-            println!("{:?}", err);
-        }
-    }
+    let download_url = format!("{}/rustup/release-stable.toml", CrateIndex::RUSTUP_MIRROR);
+    let file = index.rustup_path.join(format!("release-stable.toml"));
+    download_file(&download_url, &file, None, true).unwrap();
+    let pool = ThreadPool::new(index.thread_count);
+    CrateIndex::PLATFORMS.iter().for_each(|platform| {
+        let rustup_path = index.rustup_path.clone();
+        let file_name = if platform.contains("windows") {
+            "rustup-init.exe"
+        } else {
+            "rustup-init"
+        };
+        pool.execute(move|| {
+            let download_url = format!("{}/rustup/dist/{}/{}", CrateIndex::RUSTUP_MIRROR, platform, file_name);
+            let folder = rustup_path.join("dist").join(platform);
+            download_file_with_sha(&download_url, &folder.join(file_name),
+            &format!("{}{}", &download_url, ".sha256"), &folder.join(format!("{}{}", file_name, ".sha256")));
+        });
+        pool.join();
+    });
     Ok(())
 }
 
@@ -508,7 +602,7 @@ fn handle_diff_line(
                 let upload = index.upload;
                 let err_record = Arc::clone(&err_record);
                 pool.execute(move || {
-                    match download_file(&url, &file, Some(&c.cksum)) {
+                    match download_file(&url, &file, Some(&c.cksum), false) {
                         Ok(download_succ) => if download_succ && upload {
                             upload_file(file.to_str().unwrap(), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str()).unwrap();
                         },
@@ -753,8 +847,21 @@ fn do_merge<'a>(
     Ok(())
 }
 
+// download remote sha file and then check local fle
+pub fn download_file_with_sha(url: &str, path: &Path, sha_url: &str, sha_path: &Path,) {
+    //always update sha256 file
+    download_file(sha_url, &sha_path, None, true).unwrap();
+    match fs::read_to_string(&sha_path) {
+        Ok(content) => {
+            let sha256 = &content[..64];
+            download_file(&url, &path, Some(sha256), false).unwrap();
+        },
+        Err(_) => (),
+    };
+}
+
 /// download file from remote and calculate it's hash, return true if download and success
-pub fn download_file(url: &str, path: &Path, check_sum: Option<&str>) -> Result<bool, FreighterError> {
+pub fn download_file(url: &str, path: &Path, check_sum: Option<&str>, is_override: bool) -> Result<bool, FreighterError> {
     if path.is_file() && path.exists() {
         let mut hasher = Sha256::new();
         let mut f = File::open(path)?;
@@ -770,22 +877,31 @@ pub fn download_file(url: &str, path: &Path, check_sum: Option<&str>) -> Result<
             } else {
                 println!("!!![REMOVE] \t\t {:?} !", f);
                 fs::remove_file(path)?;
-                let mut resp = reqwest::blocking::get(url)?;
-                let mut out = File::create(path)?;
-                io::copy(&mut resp, &mut out)?;
-                println!("!!![REMOVED DOWNLOAD] \t\t {:?}", out);
+                generate_folder_and_file(url, path, "!!![REMOVED DOWNLOAD] \t\t ").unwrap();
             }
-        } else {
-            println!("file exist but not pass check_sum, skiping download {}", path.display())
+        } else if !is_override {
+            println!("file exist but not pass check_sum, skiping download {}", path.display());
+            return Ok(false);
+        }   
+    }
+    generate_folder_and_file(url, path, "&&&[NEW] \t\t ").unwrap();
+    Ok(true)
+}
+
+pub fn generate_folder_and_file(url: &str, path: &Path, msg: &str) -> FreightResult {
+    // generate parent folder if unexist
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent).unwrap();
         }
-    } else {
-        println!("{}", url);
-        let mut resp = reqwest::blocking::get(url)?;
+    }
+    let mut resp = reqwest::blocking::get(url).unwrap();
+    if resp.status() == 200 {
         let mut out = File::create(path).unwrap();
         io::copy(&mut resp, &mut out).unwrap();
-        println!("&&&[NEW] \t\t {:?}", out);
+        println!("{} {:?}", msg, out);
     }
-    Ok(true)
+    Ok(())
 }
 
 /// upload file to s3

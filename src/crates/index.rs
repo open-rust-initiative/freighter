@@ -157,6 +157,8 @@ impl CrateIndex {
             path: work_dir.join("freighter/crates.io-index"),
             crates_path: work_dir.join("freighter/crates"),
             log_path: work_dir.join("freighter/log"),
+            rustup_path: work_dir.join("freighter/rustup"),
+            dist_path: work_dir.join("freighter/dist"),
             ..Default::default()}
     }
 

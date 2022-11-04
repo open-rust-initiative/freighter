@@ -132,7 +132,7 @@ pub struct Target {
 /// entrance function
 pub fn sync_rustup(index: CrateIndex) -> FreightResult {
     sync_rustup_init(&index)?;
-    sync_channel(&index, "stable")?;
+    sync_channel(&index, "1.65")?;
     sync_channel(&index, "beta")?;
     sync_channel(&index, "nightly")?;
     Ok(())
@@ -156,8 +156,8 @@ pub fn sync_rustup_init(index: &CrateIndex) -> FreightResult {
             let folder = rustup_path.join("dist").join(platform);
             download_file_with_sha(&download_url, &folder, &file_name).unwrap();
         });
-        pool.join();
     });
+    pool.join();
     Ok(())
 }
 

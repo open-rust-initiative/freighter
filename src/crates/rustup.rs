@@ -1,12 +1,14 @@
 use std::{
     collections::HashMap,
-    fs,
+    fs::{self},
     io::ErrorKind,
     path::{Path, PathBuf},
 };
 
+use chrono::{Duration, NaiveDate, Utc};
 use serde::Deserialize;
 use threadpool::ThreadPool;
+use walkdir::WalkDir;
 
 use crate::{
     download::{download_file, download_file_with_sha},
@@ -133,21 +135,31 @@ pub struct Target {
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub sync_stable_versions: Vec<String>,
-    pub sync_nightly_days: usize,
+    pub sync_nightly_days: i64,
+    pub sync_beta_days: i64,
 }
 
 /// entrance function
 pub fn sync_rustup(index: CrateIndex) -> FreightResult {
+    // step1: sync init file
     sync_rustup_init(&index)?;
-    // sync latest stable,beta and nightly
+    // step2: sync latest stable,beta and nightly
     sync_channel(&index, "stable")?;
     sync_channel(&index, "beta")?;
     sync_channel(&index, "nightly")?;
-    // sync specified version by config file
+    // step3: sync specified version by config file
     let config = get_config(&index).unwrap();
     config.sync_stable_versions.iter().for_each(|channel| {
         sync_channel(&index, channel).unwrap();
     });
+    // step4: clean data after sync
+    let channles = [
+        ("beta", config.sync_beta_days),
+        ("nightly", config.sync_nightly_days),
+    ];
+    for channel in channles {
+        clean_historical_version(&index, channel).unwrap();
+    }
     Ok(())
 }
 
@@ -174,15 +186,15 @@ pub fn sync_rustup_init(index: &CrateIndex) -> FreightResult {
     Ok(())
 }
 
-// sync rust toolchain by channel
+// sync the latest toolchain by given a channel name(stable, beta, nightly) or history verison by version number
 pub fn sync_channel(index: &CrateIndex, channel: &str) -> FreightResult {
     let channel_name = format!("channel-rust-{}.toml", channel);
     let channel_url = format!("{}/dist/{}", RUSTUP_MIRROR, channel_name);
     download_file_with_sha(&channel_url, &index.dist_path, &channel_name).unwrap();
     let pool = ThreadPool::new(index.thread_count);
     // parse_channel_file and download;
-    let file_list = parse_channel_file(&index.dist_path.join(channel_name)).unwrap();
-    file_list.into_iter().for_each(|(url, hash)| {
+    let download_list = parse_channel_file(&index.dist_path.join(channel_name)).unwrap();
+    download_list.into_iter().for_each(|(url, hash)| {
         // example: https://static.rust-lang.org/dist/2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi
         // remove url prefix "https://static.rust-lang.org/dist"
         let path: PathBuf = std::iter::once(index.dist_path.to_owned())
@@ -196,6 +208,7 @@ pub fn sync_channel(index: &CrateIndex, channel: &str) -> FreightResult {
     Ok(())
 }
 
+// parse channel file to get download url and hash
 pub fn parse_channel_file(path: &Path) -> Result<Vec<(String, String)>, FreighterError> {
     let content = fs::read_to_string(path).unwrap();
     // println!("{}", &content[..64]);
@@ -218,6 +231,7 @@ pub fn parse_channel_file(path: &Path) -> Result<Vec<(String, String)>, Freighte
     Ok(res)
 }
 
+// read channel list from config file, if config file don't exist then it will be created from default file
 pub fn get_config(index: &CrateIndex) -> Result<Config, FreighterError> {
     let content = match fs::read_to_string(&index.config_path) {
         Ok(content) => content,
@@ -234,6 +248,43 @@ pub fn get_config(index: &CrateIndex) -> Result<Config, FreighterError> {
             other_error => panic!("Can't read config file: {}", other_error),
         },
     };
-    let config: Config = toml::from_str(&content).unwrap();
+    let config: Config = match toml::from_str(&content) {
+        Ok(config) => config,
+        Err(_) => panic!("Config file doesn't match, maybe it's outdated or you have provided a invalid value, you can manaully delete it and try again"),
+    };
     Ok(config)
+}
+
+pub fn clean_historical_version(index: &CrateIndex, channels: (&str, i64)) -> FreightResult {
+    let (channel, sync_days) = channels;
+    // filter dir less than sync_nightly_days ago
+    fs::read_dir(&index.dist_path)
+        .unwrap()
+        .filter(|f| {
+            let entry = f.as_ref().unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                let date = NaiveDate::parse_from_str(
+                    f.as_ref().unwrap().file_name().to_str().unwrap(),
+                    "%Y-%m-%d",
+                )
+                .unwrap();
+                Utc::now().date_naive() - date > Duration::days(sync_days)
+            } else {
+                false
+            }
+        })
+        .for_each(|dir| {
+            WalkDir::new(dir.as_ref().unwrap().path())
+                .into_iter()
+                .for_each(|f| {
+                    let file_name = f.as_ref().unwrap().file_name().to_str().unwrap();
+                    let path = f.as_ref().unwrap().path();
+                    if file_name.contains(channel) {
+                        fs::remove_file(path).unwrap();
+                        println!("!!![REMOVE] \t\t {:?} !", path);
+                    }
+                });
+        });
+
+    Ok(())
 }

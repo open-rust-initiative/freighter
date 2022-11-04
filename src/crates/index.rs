@@ -22,7 +22,6 @@ use git2::{FetchOptions, Progress, RemoteCallbacks, Repository, ObjectType, Obje
 use url::Url;
 use walkdir::{DirEntry, WalkDir};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use std::collections::BTreeMap;
 use std::cell::RefCell;
@@ -33,8 +32,8 @@ use std::sync::{Mutex, Arc};
 use threadpool::ThreadPool;
 use std::str;
 
-use crate::errors::{FreightResult, FreighterError};
-use crate::download::{ download_file, upload_file, download_file_with_sha };
+use crate::errors::{FreightResult};
+use crate::download::{ download_file, upload_file };
 
 /// `CrateIndex` is a wrapper `Git Repository` that crates-io index.
 ///

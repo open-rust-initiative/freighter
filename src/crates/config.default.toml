@@ -1,3 +1,8 @@
+# stable version that you want to keep forever
 sync_stable_versions = ["1.63", "1.64", "1.65"]
 
+# days you want to keep for historical nightly version
 sync_nightly_days = 30
+
+# days you want to keep for historical beta version
+sync_beta_days = 30

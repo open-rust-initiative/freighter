@@ -51,7 +51,9 @@ pub struct CrateIndex {
     pub dist_path: PathBuf,
     pub thread_count: usize,
     // upload file after download
-    pub upload: bool
+    pub upload: bool,
+    // config file path
+    pub config_path: PathBuf
 }
 
 /// State contains the progress when download crates file
@@ -97,6 +99,7 @@ impl Default for CrateIndex {
             dist_path: home_path.join("freighter/dist"),
             thread_count: 16,
             upload: false,
+            config_path: home_path.join("freighter/config.toml")
         }
     }
 }
@@ -159,6 +162,7 @@ impl CrateIndex {
             log_path: work_dir.join("freighter/log"),
             rustup_path: work_dir.join("freighter/rustup"),
             dist_path: work_dir.join("freighter/dist"),
+            config_path: work_dir.join("freighter/config.toml"),
             ..Default::default()}
     }
 

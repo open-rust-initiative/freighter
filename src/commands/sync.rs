@@ -41,8 +41,7 @@ pub fn cli() -> clap::Command {
 
     clap::Command::new("sync")
         .subcommand(subcommand("pull"))
-        .subcommand(subcommand("rustup")
-            .arg(arg!(--config <FILE> "use config file to download rust version").required(true)))
+        .subcommand(subcommand("rustup"))
         .subcommand(subcommand("download")
             .arg(flag("init", "Start init download of crates file, this will traverse all index for full download"))
             .arg(flag("upload", "upload file after download"))

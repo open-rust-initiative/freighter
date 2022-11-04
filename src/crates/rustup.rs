@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fs,
+    io::ErrorKind,
     path::{Path, PathBuf},
 };
 
@@ -129,12 +130,24 @@ pub struct Target {
     pub xz_hash: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    pub sync_stable_versions: Vec<String>,
+    pub sync_nightly_days: usize,
+}
+
 /// entrance function
 pub fn sync_rustup(index: CrateIndex) -> FreightResult {
     sync_rustup_init(&index)?;
-    sync_channel(&index, "1.65")?;
+    // sync latest stable,beta and nightly
+    sync_channel(&index, "stable")?;
     sync_channel(&index, "beta")?;
     sync_channel(&index, "nightly")?;
+    // sync specified version by config file
+    let config = get_config(&index).unwrap();
+    config.sync_stable_versions.iter().for_each(|channel| {
+        sync_channel(&index, channel).unwrap();
+    });
     Ok(())
 }
 
@@ -203,4 +216,24 @@ pub fn parse_channel_file(path: &Path) -> Result<Vec<(String, String)>, Freighte
         })
         .collect();
     Ok(res)
+}
+
+pub fn get_config(index: &CrateIndex) -> Result<Config, FreighterError> {
+    let content = match fs::read_to_string(&index.config_path) {
+        Ok(content) => content,
+        Err(err) => match err.kind() {
+            ErrorKind::NotFound => {
+                if let Some(parent) = index.config_path.parent() {
+                    if !parent.exists() {
+                        fs::create_dir_all(parent).unwrap();
+                    }
+                }
+                fs::write(&index.config_path, include_str!("config.default.toml"))?;
+                fs::read_to_string(&index.config_path).unwrap()
+            }
+            other_error => panic!("Can't read config file: {}", other_error),
+        },
+    };
+    let config: Config = toml::from_str(&content).unwrap();
+    Ok(config)
 }

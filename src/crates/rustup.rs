@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use serde::Deserialize;
 use threadpool::ThreadPool;
@@ -127,8 +131,10 @@ pub struct Target {
 
 /// entrance function
 pub fn sync_rustup(index: CrateIndex) -> FreightResult {
-    sync_channel(&index, "stable").unwrap();
-    sync_rustup_init(&index).unwrap();
+    sync_rustup_init(&index)?;
+    sync_channel(&index, "stable")?;
+    sync_channel(&index, "beta")?;
+    sync_channel(&index, "nightly")?;
     Ok(())
 }
 
@@ -160,13 +166,20 @@ pub fn sync_channel(index: &CrateIndex, channel: &str) -> FreightResult {
     let channel_name = format!("channel-rust-{}.toml", channel);
     let channel_url = format!("{}/dist/{}", RUSTUP_MIRROR, channel_name);
     download_file_with_sha(&channel_url, &index.dist_path, &channel_name).unwrap();
-
-    // parse_channel_file();
+    let pool = ThreadPool::new(index.thread_count);
+    // parse_channel_file and download;
     let file_list = parse_channel_file(&index.dist_path.join(channel_name)).unwrap();
     file_list.into_iter().for_each(|(url, hash)| {
-        download_file(&url, &index.dist_path, Some(&hash), false).unwrap();
+        // example: https://static.rust-lang.org/dist/2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi
+        // remove url prefix "https://static.rust-lang.org/dist"
+        let path: PathBuf = std::iter::once(index.dist_path.to_owned())
+            .chain(url.split("/").map(PathBuf::from).collect::<Vec<PathBuf>>()[4..].to_owned())
+            .collect();
+        pool.execute(move || {
+            download_file(&url, &path, Some(&hash), false).unwrap();
+        });
     });
-
+    pool.join();
     Ok(())
 }
 

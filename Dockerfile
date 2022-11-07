@@ -12,7 +12,7 @@ ENV UID=10001
 RUN adduser \
     --disabled-password \
     --gecos "" \
-    --home "/nonexistent" \
+    --home "/freighter" \
     --shell "/sbin/nologin" \
     --no-create-home \
     --uid "${UID}" \
@@ -39,11 +39,11 @@ RUN apt update && apt install -y ca-certificates
 COPY --from=builder /etc/passwd /etc/passwd
 COPY --from=builder /etc/group /etc/group
 
-RUN mkdir -p /freighter/data
-
-RUN chown freighter /freighter/data
+#RUN mkdir -p /freighter/data
 
 WORKDIR /freighter
+
+RUN chown freighter:freighter /freighter
 
 # Copy our build
 COPY --from=builder /freighter/target/release/freighter /usr/local/bin

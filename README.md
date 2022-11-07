@@ -18,6 +18,59 @@ Usually, you don't need to host your own crate registry. When we are developing 
 
 ### How to use?
 
+#### Deploy Freighter With Docker
+
+##### 1. Pull docker image from __your__ registry.
+```bash
+docker pull registry.digitalocean.com/rust-lang/freighter:latest
+```
+
+##### 2. Start dokcer container
+before start wo should grant permission to your __workdir__, in the following example which is /mnt/volume_fra1_02.
+
+```bash
+chmod 664 /mnt/volume_fra1_02
+```
+Then start container with your own volume.
+```bash
+docker run -it -d -v /mnt/volume_fra1_02/:/freighter  --name freighter registry.digitalocean.com/rust-lang/freighter:latest
+```
+
+##### 3. Start sync command.
+There are several commands you can run to sync data with freighter, for example if you want to sync crates,you should first run __freighter sync pull__ and then __freighter sync download__
+
+```bash
+docker exec freighter bash -c 'freighter sync pull && freighter download'
+```
+
+if you want to sync rustup mirrors, just run 
+```bash
+docker exec freighter bash -c 'freighter sync rustup'
+```
+
+##### 4. Add the cron job to the crontab.
+```bash
+$ crontab -e
+$ # Add the following line to the crontab file
+$ */5 * * * * docker exec freighter bash -c 'freighter sync pull && freighter sync download'
+$ 0 2 * * *  docker exec freighter bash -c 'freighter sync rustup'
+```
+
+#### Directly Usage
+
+##### 1. Sync the crates index with specify directory
+```bash
+$ freighter sync -c /mnt/volume_fra1_01 pull
+```
+##### 2. Download all crates file to local disk and then uoload to s3(you need to config s3cmd tools):
+```bash
+freighter sync download --init --upload
+```
+##### 3. Download crates file with multi-thread to specify directory:
+```bash
+freighter sync -t 128 -c /mnt/volume_fra1_01 download --init
+```
+
 ### How to contribute?
 
 This project enforce the [DCO](https://developercertificate.org).

@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs::{self},
+    fs::{self, DirEntry},
     io::ErrorKind,
     path::{Path, PathBuf},
 };
@@ -140,7 +140,7 @@ pub struct Config {
 }
 
 /// entrance function
-pub fn sync_rustup(index: CrateIndex) -> FreightResult {
+pub fn sync_rustup(index: CrateIndex, clean: bool) -> FreightResult {
     // step1: sync init file
     sync_rustup_init(&index)?;
     // step2: sync latest stable,beta and nightly
@@ -153,12 +153,14 @@ pub fn sync_rustup(index: CrateIndex) -> FreightResult {
         sync_channel(&index, channel).unwrap();
     });
     // step4: clean data after sync
-    let channles = [
-        ("beta", config.sync_beta_days),
-        ("nightly", config.sync_nightly_days),
-    ];
-    for channel in channles {
-        clean_historical_version(&index, channel).unwrap();
+    if clean {
+        let channles = [
+            ("beta", config.sync_beta_days),
+            ("nightly", config.sync_nightly_days),
+        ];
+        for channel in channles {
+            clean_historical_version(&index, channel).unwrap();
+        }
     }
     Ok(())
 }
@@ -260,31 +262,44 @@ pub fn clean_historical_version(index: &CrateIndex, channels: (&str, i64)) -> Fr
     // filter dir less than sync_nightly_days ago
     fs::read_dir(&index.dist_path)
         .unwrap()
-        .filter(|f| {
-            let entry = f.as_ref().unwrap();
-            if entry.file_type().unwrap().is_dir() {
-                let date = NaiveDate::parse_from_str(
-                    f.as_ref().unwrap().file_name().to_str().unwrap(),
-                    "%Y-%m-%d",
-                )
-                .unwrap();
-                Utc::now().date_naive() - date > Duration::days(sync_days)
-            } else {
-                false
-            }
-        })
-        .for_each(|dir| {
-            WalkDir::new(dir.as_ref().unwrap().path())
+        .filter_map(|v| v.ok())
+        .filter(|entry| compare_date(entry, sync_days))
+        .for_each(|entry| {
+            WalkDir::new(entry.path())
                 .into_iter()
-                .for_each(|f| {
-                    let file_name = f.as_ref().unwrap().file_name().to_str().unwrap();
-                    let path = f.as_ref().unwrap().path();
+                .filter_map(|f| f.ok())
+                .for_each(|entry| {
+                    let file_name = entry.file_name().to_str().unwrap();
                     if file_name.contains(channel) {
-                        fs::remove_file(path).unwrap();
-                        println!("!!![REMOVE] \t\t {:?} !", path);
+                        fs::remove_file(entry.path()).unwrap();
+                        println!("!!![REMOVE] \t\t {:?} !", entry.path());
                     }
                 });
+            // remvoe whole directory when it's empty
+            if entry.path().read_dir().unwrap().next().is_none() {
+                fs::remove_dir_all(entry.path()).unwrap();
+                println!("!!![REMOVE] \t\t {:?} !", entry.path());
+            }
         });
 
     Ok(())
+}
+
+pub fn compare_date(entry: &DirEntry, sync_days: i64) -> bool {
+    if entry.file_type().unwrap().is_dir() {
+        let date = match NaiveDate::parse_from_str(entry.file_name().to_str().unwrap(), "%Y-%m-%d")
+        {
+            Ok(date) => date,
+            Err(_) => {
+                println!(
+                    "can't parse dir :{} and skipping... ",
+                    entry.path().display()
+                );
+                return false;
+            }
+        };
+        Utc::now().date_naive() - date > Duration::days(sync_days)
+    } else {
+        false
+    }
 }

@@ -391,7 +391,7 @@ pub fn pull(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
             !e.as_ref().unwrap().file_name().to_str().unwrap().contains("git")).next().is_none() {
             println!("It seems last task has been broken and {} is empty, 
             freighter had to removed this index, and then run init", index_dir.display());
-            match fs::remove_dir(index_dir) {
+            match fs::remove_dir_all(index_dir) {
                 Ok(_) => index.git_clone(opts).unwrap(),
                 Err(e) => panic!("Remove index failed, try to delete it manualy: {}", e),
             };

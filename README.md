@@ -52,12 +52,12 @@ After download all the files by using __freighter sync download__ and __freighte
 
 ```bash
 // create your own bucket in s3
-s3cmd mb s3://your-own-buckrt
+s3cmd mb s3://your-own-bucket
 
-//start uplaod to your
-freighter sync upload --bucket your-own-buckrt
+//start uplaod to your own bucket
+freighter sync upload --bucket your-own-bucket
 ```
-Tips: we use s3cmd to do this, so you may need to complete your own configuration before using [s3cmd](https://github.com/s3tools/s3cmd)
+Tips: we use s3cmd to upload files, so you may need to complete your own configuration before using [s3cmd](https://github.com/s3tools/s3cmd)
 
 ##### 4. Add the cron job to the crontab.
 ```bash

@@ -92,7 +92,6 @@ pub fn sync_folder(folder: &PathBuf, bucket: &str) -> FreightResult {
     let status = std::process::Command::new("s3cmd")
     .arg("sync")
     .arg(folder)
-    .arg("--delete-removed")
     .arg(format!("s3://{}/",bucket))
     .arg("--acl-public")
     .status()

@@ -40,10 +40,11 @@ use crate::errors::FreightResult;
 pub fn cli() -> clap::Command {
     clap::Command::new("sync")
         .subcommand(subcommand("pull"))
-        .subcommand(subcommand("rustup"))
+        .subcommand(subcommand("rustup")
+            .arg(flag("clean", "clean up historical files")))
         .subcommand(subcommand("upload")
         .arg(
-            arg!(-b --"bucket" <VALUE> "set the bucket name you want to upload to s3")
+            arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files")
             .required(true)
         ))
         .subcommand(subcommand("download")
@@ -129,11 +130,13 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
                 },
             )?
         }
-        Some(("rustup", _)) => sync_rustup(index)?,
+        Some(("rustup", args)) => {
+            sync_rustup(index, args.get_flag("clean"))?
+        },
         Some(("upload", args)) => {
             let bucket = args.get_one::<String>("bucket").cloned().unwrap();
             upload_to_s3(index, &bucket)?
-        } 
+        }
         Some((cmd, _)) => {
             unreachable!("unexpected command {}", cmd)
         }

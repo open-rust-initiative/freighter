@@ -44,7 +44,6 @@ pub fn cli() -> clap::Command {
         .subcommand(subcommand("upload")
         .arg(
             arg!(-b --"bucket" <VALUE> "set the bucket name you want to upload to s3")
-            // .value_parser(value_parser!(usize))
             .required(true)
         ))
         .subcommand(subcommand("download")

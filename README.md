@@ -36,17 +36,28 @@ Then start container with your own volume.
 docker run -it -d -v /mnt/volume_fra1_02/:/freighter  --name freighter registry.digitalocean.com/rust-lang/freighter:latest
 ```
 
-##### 3. Start sync command.
+##### 3. Start downlaod files and upload to s3.
 There are several commands you can run to sync data with freighter, for example if you want to sync crates,you should first run __freighter sync pull__ and then __freighter sync download__
 
 ```bash
-docker exec freighter bash -c 'freighter sync pull && freighter download'
+docker exec freighter bash -c 'freighter sync pull && freighter sync download'
 ```
 
 if you want to sync rustup mirrors, just run 
 ```bash
 docker exec freighter bash -c 'freighter sync rustup'
 ```
+
+After download all the files by using __freighter sync download__ and __freighter sync rustup__, you can run upload command to upstream all your local files to s3, for example:
+
+```bash
+// create your own bucket in s3
+s3cmd mb s3://your-own-buckrt
+
+//start uplaod to your
+freighter sync upload --bucket your-own-buckrt
+```
+Tips: we use s3cmd to do this, so you may need to complete your own configuration before using [s3cmd](https://github.com/s3tools/s3cmd)
 
 ##### 4. Add the cron job to the crontab.
 ```bash

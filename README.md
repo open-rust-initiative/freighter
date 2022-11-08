@@ -20,7 +20,7 @@ Usually, you don't need to host your own crate registry. When we are developing 
 
 #### Deploy Freighter With Docker
 
-##### 1. Pull docker image from __your__ registry.
+##### 1. Pull docker image from your registry.
 ```bash
 docker pull registry.digitalocean.com/rust-lang/freighter:latest
 ```
@@ -29,7 +29,7 @@ docker pull registry.digitalocean.com/rust-lang/freighter:latest
 before start wo should grant permission to your __workdir__, in the following example which is /mnt/volume_fra1_02.
 
 ```bash
-chmod 664 /mnt/volume_fra1_02
+chmod 777 /mnt/volume_fra1_02
 ```
 Then start container with your own volume.
 ```bash

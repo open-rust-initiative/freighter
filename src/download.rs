@@ -1,6 +1,6 @@
-use std::{io, path::Path, fs::{File, self}};
+use std::{io, path::{Path, PathBuf}, fs::{File, self}};
 use sha2::{Sha256, Digest};
-use crate::errors::{FreighterError, FreightResult};
+use crate::{errors::{FreighterError, FreightResult}};
 
 
 // download remote sha file and then download file for hash check
@@ -82,6 +82,21 @@ pub fn upload_file(file: &str, folder: &str, filename: &str) -> FreightResult {
         .arg("--acl-public")
         .status()
         .expect("failed to execute process");
+    if !status.success() {
+        return Err(FreighterError::code(status.code().unwrap()));
+    }
+    Ok(())
+}
+
+pub fn sync_folder(folder: &PathBuf, bucket: &str) -> FreightResult {
+    let status = std::process::Command::new("s3cmd")
+    .arg("sync")
+    .arg(folder)
+    .arg("--delete-removed")
+    .arg(format!("s3://{}/",bucket))
+    .arg("--acl-public")
+    .status()
+    .expect("failed to execute s3cmd sync");
     if !status.success() {
         return Err(FreighterError::code(status.code().unwrap()));
     }

@@ -30,7 +30,7 @@ use clap::{arg, ArgMatches};
 
 use crate::config::Config;
 use crate::crates::command_prelude::*;
-use crate::crates::index::{download, pull, CrateIndex, SyncOptions};
+use crate::crates::index::{download, pull, upload_to_s3, CrateIndex, SyncOptions};
 use crate::crates::rustup::sync_rustup;
 use crate::errors::FreightResult;
 
@@ -38,10 +38,15 @@ use crate::errors::FreightResult;
 ///
 
 pub fn cli() -> clap::Command {
-
     clap::Command::new("sync")
         .subcommand(subcommand("pull"))
         .subcommand(subcommand("rustup"))
+        .subcommand(subcommand("upload")
+        .arg(
+            arg!(-b --"bucket" <VALUE> "set the bucket name you want to upload to s3")
+            // .value_parser(value_parser!(usize))
+            .required(true)
+        ))
         .subcommand(subcommand("download")
             .arg(flag("init", "Start init download of crates file, this will traverse all index for full download"))
             .arg(flag("upload", "upload file after download"))
@@ -96,7 +101,7 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
             let index: CrateIndex = Default::default();
             println!("use default crates path: {}", index.crates_path.display());
             index
-        },
+        }
     };
 
     match args.get_one::<usize>("thread-count").cloned() {
@@ -112,7 +117,7 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
             index,
             &mut SyncOptions {
                 no_progressbar,
-                init: false
+                init: false,
             },
         )?,
         Some(("download", args)) => {
@@ -125,9 +130,11 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
                 },
             )?
         }
-        Some(("rustup", _)) => {
-            sync_rustup(index)?
-        }
+        Some(("rustup", _)) => sync_rustup(index)?,
+        Some(("upload", args)) => {
+            let bucket = args.get_one::<String>("bucket").cloned().unwrap();
+            upload_to_s3(index, &bucket)?
+        } 
         Some((cmd, _)) => {
             unreachable!("unexpected command {}", cmd)
         }

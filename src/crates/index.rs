@@ -33,7 +33,7 @@ use threadpool::ThreadPool;
 use std::str;
 
 use crate::errors::{FreightResult};
-use crate::download::{ download_file, upload_file };
+use crate::download::{ download_file, upload_file, sync_folder };
 
 /// `CrateIndex` is a wrapper `Git Repository` that crates-io index.
 ///
@@ -441,6 +441,15 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
     Ok(())
 }
 
+
+
+pub fn upload_to_s3(index: CrateIndex, bucket_name: &str) -> FreightResult {
+    let sync_paths = [&index.crates_path, &index.rustup_path, &index.dist_path];
+    for path in sync_paths {
+        sync_folder(&path, bucket_name).unwrap();
+    }
+    Ok(())
+}
 
 
 /// get repo from path

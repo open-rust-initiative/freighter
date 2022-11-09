@@ -139,21 +139,34 @@ pub struct Config {
     pub sync_beta_days: i64,
 }
 
+#[derive(Default)]
+pub struct RustUpOptions {
+    /// Whether to clean historical versions.
+    pub clean: bool,
+    /// only sync that version
+    pub version: Option<String>,
+}
+
 /// entrance function
-pub fn sync_rustup(index: CrateIndex, clean: bool) -> FreightResult {
-    // step1: sync init file
+pub fn sync_rustup(index: CrateIndex, opts: RustUpOptions) -> FreightResult {
+    // step1: sync rustup init file
     sync_rustup_init(&index)?;
-    // step2: sync latest stable,beta and nightly
-    sync_channel(&index, "stable")?;
-    sync_channel(&index, "beta")?;
-    sync_channel(&index, "nightly")?;
-    // step3: sync specified version by config file
     let config = get_config(&index).unwrap();
-    config.sync_stable_versions.iter().for_each(|channel| {
-        sync_channel(&index, channel).unwrap();
-    });
-    // step4: clean data after sync
-    if clean {
+    if let Some(version) = opts.version {
+        // step2.1 : sync input channel version
+        sync_channel(&index, &version)?;
+    } else {
+        // step2.2: sync latest stable,beta and nightly channel
+        sync_channel(&index, "stable")?;
+        sync_channel(&index, "beta")?;
+        sync_channel(&index, "nightly")?;
+        // step2.3: sync specified channel version by config file
+        config.sync_stable_versions.iter().for_each(|channel| {
+            sync_channel(&index, channel).unwrap();
+        });
+    }
+    // step3: clean historical channel files after sync
+    if opts.clean {
         let channles = [
             ("beta", config.sync_beta_days),
             ("nightly", config.sync_nightly_days),
@@ -192,21 +205,29 @@ pub fn sync_rustup_init(index: &CrateIndex) -> FreightResult {
 pub fn sync_channel(index: &CrateIndex, channel: &str) -> FreightResult {
     let channel_name = format!("channel-rust-{}.toml", channel);
     let channel_url = format!("{}/dist/{}", RUSTUP_MIRROR, channel_name);
-    download_file_with_sha(&channel_url, &index.dist_path, &channel_name).unwrap();
-    let pool = ThreadPool::new(index.thread_count);
-    // parse_channel_file and download;
-    let download_list = parse_channel_file(&index.dist_path.join(channel_name)).unwrap();
-    download_list.into_iter().for_each(|(url, hash)| {
-        // example: https://static.rust-lang.org/dist/2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi
-        // remove url prefix "https://static.rust-lang.org/dist"
-        let path: PathBuf = std::iter::once(index.dist_path.to_owned())
-            .chain(url.split("/").map(PathBuf::from).collect::<Vec<PathBuf>>()[4..].to_owned())
-            .collect();
-        pool.execute(move || {
-            download_file(&url, &path, Some(&hash), false).unwrap();
-        });
-    });
-    pool.join();
+    match download_file_with_sha(&channel_url, &index.dist_path, &channel_name) {
+        Ok(_) => {
+            let pool = ThreadPool::new(index.thread_count);
+            // parse_channel_file and download;
+            let download_list = parse_channel_file(&index.dist_path.join(channel_name)).unwrap();
+            download_list.into_iter().for_each(|(url, hash)| {
+                // example: https://static.rust-lang.org/dist/2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi
+                // remove url prefix "https://static.rust-lang.org/dist"
+                let path: PathBuf = std::iter::once(index.dist_path.to_owned())
+                    .chain(
+                        url.split("/").map(PathBuf::from).collect::<Vec<PathBuf>>()[4..].to_owned(),
+                    )
+                    .collect();
+                pool.execute(move || {
+                    download_file(&url, &path, Some(&hash), false).unwrap();
+                });
+            });
+            pool.join();
+        }
+        Err(_err) => {
+            println!("skipping download channel:{}", channel);
+        }
+    }
     Ok(())
 }
 

@@ -15,7 +15,7 @@ pub fn download_file_with_sha(url: &str, file_folder: &Path, file_name: &str) ->
             let sha256 = &content[..64];
             download_file(&url, &file_folder.join(file_name), Some(sha256), false).unwrap();
         },
-        Err(_) => return Ok(false),
+        Err(_) => return Err(FreighterError::code(1)),
     };
     Ok(true)
 }
@@ -60,6 +60,8 @@ pub fn generate_folder_and_file(url: &str, path: &Path, msg: &str) -> FreightRes
         let mut out = File::create(path).unwrap();
         io::copy(&mut resp, &mut out).unwrap();
         println!("{} {:?}", msg, out);
+    } else {
+        println!("download failed, Please check your url: {}", url)
     }
     Ok(())
 }

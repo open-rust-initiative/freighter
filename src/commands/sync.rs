@@ -31,7 +31,7 @@ use clap::{arg, ArgMatches};
 use crate::config::Config;
 use crate::crates::command_prelude::*;
 use crate::crates::index::{download, pull, upload_to_s3, CrateIndex, SyncOptions};
-use crate::crates::rustup::sync_rustup;
+use crate::crates::rustup::{sync_rustup, RustUpOptions};
 use crate::errors::FreightResult;
 
 /// The __sync__ subcommand
@@ -41,7 +41,9 @@ pub fn cli() -> clap::Command {
     clap::Command::new("sync")
         .subcommand(subcommand("pull"))
         .subcommand(subcommand("rustup")
-            .arg(flag("clean", "clean up historical files")))
+            .arg(flag("clean", "clean up historical versions"))
+            .arg(arg!(-v --"version" <VALUE> "download only specified version"))
+        )
         .subcommand(subcommand("upload")
         .arg(
             arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files")
@@ -130,9 +132,13 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
                 },
             )?
         }
-        Some(("rustup", args)) => {
-            sync_rustup(index, args.get_flag("clean"))?
-        },
+        Some(("rustup", args)) => sync_rustup(
+            index,
+            RustUpOptions {
+                clean: args.get_flag("clean"),
+                version: args.get_one::<String>("version").cloned(),
+            },
+        )?,
         Some(("upload", args)) => {
             let bucket = args.get_one::<String>("bucket").cloned().unwrap();
             upload_to_s3(index, &bucket)?

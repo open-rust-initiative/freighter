@@ -203,13 +203,23 @@ pub fn sync_rustup_init(index: &CrateIndex) -> FreightResult {
 
 // sync the latest toolchain by given a channel name(stable, beta, nightly) or history verison by version number
 pub fn sync_channel(index: &CrateIndex, channel: &str) -> FreightResult {
-    let channel_name = format!("channel-rust-{}.toml", channel);
-    let channel_url = format!("{}/dist/{}", RUSTUP_MIRROR, channel_name);
-    match download_file_with_sha(&channel_url, &index.dist_path, &channel_name) {
+    let channel_name;
+    let channel_url;
+    let file_folder;
+    if let Some(date) = channel.strip_prefix("nightly-") {
+        channel_name = String::from("channel-rust-nightly.toml");
+        channel_url = format!("{}/dist/{}/{}", RUSTUP_MIRROR, date, channel_name);
+        file_folder = index.dist_path.to_owned().join(date);
+    } else {
+        channel_name = format!("channel-rust-{}.toml", channel);
+        channel_url = format!("{}/dist/{}", RUSTUP_MIRROR, channel_name);
+        file_folder = index.dist_path.to_owned();
+    }
+    match download_file_with_sha(&channel_url, &file_folder, &channel_name) {
         Ok(_) => {
             let pool = ThreadPool::new(index.thread_count);
             // parse_channel_file and download;
-            let download_list = parse_channel_file(&index.dist_path.join(channel_name)).unwrap();
+            let download_list = parse_channel_file(&file_folder.join(channel_name)).unwrap();
             download_list.into_iter().for_each(|(url, hash)| {
                 // example: https://static.rust-lang.org/dist/2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi
                 // remove url prefix "https://static.rust-lang.org/dist"

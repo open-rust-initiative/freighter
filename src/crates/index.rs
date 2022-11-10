@@ -182,7 +182,7 @@ impl CrateIndex {
             let fetch_commit = do_fetch(&repo, &[CrateIndex::REMOTE_BRANCH], &mut remote, opts)?;
 
             self.generate_commit_record(&commit.id(), &fetch_commit.id());
-            println!("{}", format!("commit id：{}， remote id :{}", commit.id(), &fetch_commit.id())); 
+            println!("commit id：{}， remote id :{}", commit.id(), &fetch_commit.id());
             do_merge(&repo, CrateIndex::REMOTE_BRANCH, fetch_commit)
         } else {
             panic!("Target path is not a crates index: {}", &self.path.to_str().unwrap());
@@ -207,7 +207,7 @@ impl CrateIndex {
             let mut state = state.borrow_mut();
             state.progress = Some(stats.to_owned());
             if !opts.no_progressbar {
-                print(&mut *state);
+                print(&mut state);
             }
             true
         });

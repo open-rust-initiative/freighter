@@ -1,5 +1,14 @@
+//!
+//!
+//!
+//!
+//!
+//!
+
 use std::{io, path::{Path, PathBuf}, fs::{File, self}};
+
 use sha2::{Sha256, Digest};
+
 use crate::{errors::{FreighterError, FreightResult}};
 
 
@@ -13,7 +22,7 @@ pub fn download_file_with_sha(url: &str, file_folder: &Path, file_name: &str) ->
     match fs::read_to_string(&sha_path) {
         Ok(content) => {
             let sha256 = &content[..64];
-            download_file(&url, &file_folder.join(file_name), Some(sha256), false).unwrap();
+            download_file(url, &file_folder.join(file_name), Some(sha256), false).unwrap();
         },
         Err(_) => return Err(FreighterError::code(1)),
     };
@@ -30,7 +39,7 @@ pub fn download_file(url: &str, path: &Path, check_sum: Option<&str>, is_overrid
         let hex = format!("{:x}", result);
 
         //if need to calculate hash
-        if check_sum.is_some() {
+        if let Some(..) = check_sum {
             if hex == check_sum.unwrap() {
                 println!("###[ALREADY] \t{:?}", f);
                 return Ok(false);

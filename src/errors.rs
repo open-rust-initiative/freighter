@@ -5,8 +5,6 @@
 //!
 //!
 
-use git2;
-
 pub type FreightResult = Result<(), FreighterError>;
 
 ///
@@ -37,7 +35,7 @@ impl FreighterError {
     pub fn code(code: i32) -> FreighterError {
         FreighterError {
             error: None,
-            code: code,
+            code,
         }
     }
 
@@ -58,7 +56,7 @@ impl From<anyhow::Error> for FreighterError {
 ///
 impl From<clap::Error> for FreighterError {
     fn from(err: clap::Error) -> FreighterError {
-        let code = if err.use_stderr() { 1 } else { 0 };
+        let code = i32::from(err.use_stderr());
         FreighterError::new(err.into(), code)
     }
 }

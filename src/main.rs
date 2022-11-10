@@ -20,8 +20,5 @@ fn main() {
 
     let result = cli::main(&mut config);
 
-    match result {
-        Err(e) => e.print(),
-        Ok(()) => {}
-    }
+    if let Err(e) = result { e.print() }
 }

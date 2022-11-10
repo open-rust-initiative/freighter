@@ -16,7 +16,7 @@ description = """
 [dependencies]
 anyhow = "1.0.63"
 thiserror = "1.0.36"
-clap = "4.0.15"
+clap = "4.0.22"
 git2 = "0.15.0"
 url = "2.2.2"
 serde = { version = "1.0.145", features = ["derive"] }
@@ -27,7 +27,7 @@ timer = "0.2.0"
 chrono = "0.4.22"
 rand = "0.8.5"
 sha2 = "0.10.5"
-sea-orm = { version = "0.10.1", features = [ "sqlx-mysql", "runtime-tokio-rustls", "macros" ] }
+sea-orm = { version = "0.10.2", features = [ "sqlx-mysql", "runtime-tokio-rustls", "macros" ] }
 threadpool = "1.8.1"
 dirs = "4.0.0"
 toml = "0.5.8"

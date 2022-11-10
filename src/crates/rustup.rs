@@ -181,7 +181,7 @@ pub fn sync_rustup(index: CrateIndex, opts: RustUpOptions) -> FreightResult {
 /// sync rustup init file from static.rust-lang
 pub fn sync_rustup_init(index: &CrateIndex) -> FreightResult {
     let download_url = format!("{}/rustup/release-stable.toml", RUSTUP_MIRROR);
-    let file = index.rustup_path.join(format!("release-stable.toml"));
+    let file = index.rustup_path.join("release-stable.toml");
     download_file(&download_url, &file, None, true).unwrap();
     let pool = ThreadPool::new(index.thread_count);
     PLATFORMS.iter().for_each(|platform| {
@@ -225,7 +225,7 @@ pub fn sync_channel(index: &CrateIndex, channel: &str) -> FreightResult {
                 // remove url prefix "https://static.rust-lang.org/dist"
                 let path: PathBuf = std::iter::once(index.dist_path.to_owned())
                     .chain(
-                        url.split("/").map(PathBuf::from).collect::<Vec<PathBuf>>()[4..].to_owned(),
+                        url.split('/').map(PathBuf::from).collect::<Vec<PathBuf>>()[4..].to_owned(),
                     )
                     .collect();
                 pool.execute(move || {

@@ -219,7 +219,7 @@ impl CrateIndex {
             state.current = cur;
             state.total = total;
             if !opts.no_progressbar {
-                print(&mut *state);
+                print(&mut state);
             }
         });
 
@@ -256,7 +256,7 @@ impl CrateIndex {
         };
         // save record commit id only id does not matches
         if start_commit_id != end_commit_id {
-            writeln!(f, "{}", format!("{},{},{}", start_commit_id, end_commit_id, now.timestamp())).unwrap();
+            writeln!(f, "{},{},{}", start_commit_id, end_commit_id, now.timestamp()).unwrap();
         }
     }
 
@@ -265,7 +265,7 @@ impl CrateIndex {
         entry
             .file_name()
             .to_str()
-            .map(|s| entry.depth() == 0 || !s.starts_with("."))
+            .map(|s| entry.depth() == 0 || !s.starts_with('.'))
             .unwrap_or(false)
     }
 
@@ -309,7 +309,7 @@ impl CrateIndex {
                                 },
                                 Err(err) => {
                                     let mut err_file = err_record.lock().unwrap();
-                                    writeln!(err_file, "{}", format!("{}", format!("{}-{}.crate, {}", &c.name, &c.vers, Utc::now().timestamp()).as_str())).unwrap();
+                                    writeln!(err_file, "{}-{}.crate, {}", &c.name, &c.vers, Utc::now().timestamp()).unwrap();
                                     println!("{:?}", err);
                                 }
                             }
@@ -387,10 +387,10 @@ pub fn pull(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
     let index_dir = Path::new(index.path.as_path());
     // try to remove index dir if it's empty
     if index_dir.exists() {
-        if index_dir.read_dir().unwrap().filter(|e|
-            !e.as_ref().unwrap().file_name().to_str().unwrap().contains("git")).next().is_none() {
+        if !index_dir.read_dir().unwrap().filter_map(|x| x.ok()).any(|e|
+            !e.file_name().to_str().unwrap().contains("git")) {
             println!("It seems last task has been broken and {} is empty, 
-            freighter had to removed this index, and then run init", index_dir.display());
+            freighter had to removed this index, and then run init again", index_dir.display());
             match fs::remove_dir_all(index_dir) {
                 Ok(_) => index.git_clone(opts).unwrap(),
                 Err(e) => panic!("Remove index failed, try to delete it manualy: {}", e),
@@ -427,13 +427,12 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
         let pool = ThreadPool::new(index.thread_count);
         let err_record = open_file_with_mutex(&index.log_path);
         // get last line of record file
-        let mut lines: Vec<_> = buffered.lines().map(|line| { line.unwrap() }).collect();
+        let mut lines: Vec<String> = buffered.lines().map(|line| line.unwrap()).collect();
         lines.reverse();
-        for line in lines.iter() {
+        if let Some(line) = lines.first() {
             let vec: Vec<&str> = line.split(',').collect();
             println!("{:?}", line);
             git2_diff(&index, vec[0], vec[1], &pool, err_record).unwrap();
-            break;
         }
         pool.join();
     }
@@ -446,7 +445,7 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
 pub fn upload_to_s3(index: CrateIndex, bucket_name: &str) -> FreightResult {
     let sync_paths = [&index.crates_path, &index.rustup_path, &index.dist_path];
     for path in sync_paths {
-        sync_folder(&path, bucket_name).unwrap();
+        sync_folder(path, bucket_name).unwrap();
     }
     Ok(())
 }
@@ -504,7 +503,7 @@ fn handle_diff_line(
                     fs::create_dir_all(&folder).unwrap();
                 }
                 let upload = index.upload;
-                let err_record = Arc::clone(&err_record);
+                let err_record = Arc::clone(err_record);
                 pool.execute(move || {
                     match download_file(&url, &file, Some(&c.cksum), false) {
                         Ok(download_succ) => if download_succ && upload {
@@ -512,7 +511,7 @@ fn handle_diff_line(
                         },
                         Err(err) => {
                             let mut err_file = err_record.lock().unwrap();
-                            writeln!(err_file, "{}", format!("{}", format!("{}-{}.crate, {}", &c.name, &c.vers, Utc::now().timestamp()).as_str())).unwrap();
+                            writeln!(err_file, "{}-{}.crate, {}", &c.name, &c.vers, Utc::now().timestamp()).unwrap();
                             println!("{:?}", err);
                         }
                     }
@@ -531,7 +530,7 @@ fn handle_diff_line(
 }
 
 /// open error record file with Mutex
-pub fn open_file_with_mutex(log_path: &PathBuf) -> Arc<Mutex<File>> {
+pub fn open_file_with_mutex(log_path: &Path) -> Arc<Mutex<File>> {
     let file_name = log_path.join(CrateIndex::ERROR_CRATES);
     let err_record = match OpenOptions::new().write(true).append(true).open(&file_name) {
         Ok(f) => Arc::new(Mutex::new(f)),

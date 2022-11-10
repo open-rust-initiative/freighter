@@ -127,6 +127,10 @@ pub struct Pkg {
 pub struct Target {
     pub available: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub xz_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub xz_hash: Option<String>,
@@ -256,6 +260,13 @@ pub fn parse_channel_file(path: &Path) -> Result<Vec<(String, String)>, Freighte
                     let mut result: Vec<(String, String)> = Vec::new();
                     if target.xz_url.is_some() && target.xz_hash.is_some() {
                         result.push((target.xz_url.unwrap(), target.xz_hash.unwrap()));
+                    }
+                    if target.url.is_some() && target.hash.is_some() {
+                        let url = target.url.unwrap();
+                        let hash = target.hash.unwrap();
+                        if !url.is_empty() && !hash.is_empty() {
+                            result.push((url, hash));
+                        }
                     }
                     result
                 })

@@ -14,26 +14,31 @@
 /// - [ ] 6. If the destination path is a git repository and is a crate-io index, run pull instead of clone
 /// - [ ] 7. Add a flag for `enable` or `disable` the progress bar
 /// - [ ] 8. Change the test index git repo with local git repository for test performance
-
 use chrono::Utc;
 use git2::build::{CheckoutBuilder, RepoBuilder};
-use git2::{FetchOptions, Progress, RemoteCallbacks, Repository, ObjectType, Object, DiffFormat, DiffLine, DiffOptions, ErrorCode, Oid};
+use git2::{
+    DiffFormat, DiffLine, DiffOptions, ErrorCode, FetchOptions, Object, ObjectType, Oid, Progress,
+    RemoteCallbacks, Repository,
+};
 
+use serde::{Deserialize, Serialize};
 use url::Url;
 use walkdir::{DirEntry, WalkDir};
-use serde::{Deserialize, Serialize};
 
-use std::collections::BTreeMap;
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufReader, BufRead, Write, ErrorKind};
+use std::io::{self, BufRead, BufReader, ErrorKind, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, Arc};
-use threadpool::ThreadPool;
 use std::str;
+use std::sync::{Arc, Mutex};
+use threadpool::ThreadPool;
 
-use crate::errors::{FreightResult};
-use crate::download::{ download_file, upload_file, sync_folder };
+use crate::config::Config;
+use crate::download::{
+    download_crates_with_log, sync_folder
+};
+use crate::errors::FreightResult;
 
 /// `CrateIndex` is a wrapper `Git Repository` that crates-io index.
 ///
@@ -51,8 +56,7 @@ pub struct CrateIndex {
     pub thread_count: usize,
     // upload file after download
     pub upload: bool,
-    // config file path
-    pub config_path: PathBuf
+    pub work_dir: PathBuf,
 }
 
 /// State contains the progress when download crates file
@@ -65,7 +69,7 @@ pub struct State {
     pub path: Option<PathBuf>,
     pub newline: bool,
 }
-/// SyncOptions preserve the sync subcommand config 
+/// SyncOptions preserve the sync subcommand config
 #[derive(Default)]
 pub struct SyncOptions {
     /// Whether to hide progressbar when start sync.
@@ -76,14 +80,13 @@ pub struct SyncOptions {
 
 impl CrateIndex {
     /// default crate registry
-    const CRATE_REGISTRY: [&str; 3] = ["https://github.com/rust-lang/crates.io-index.git","",""];
+    const CRATE_REGISTRY: [&str; 3] = ["https://github.com/rust-lang/crates.io-index.git", "", ""];
     const RECORD_NAME: &str = "record.cache";
     const ERROR_CRATES: &str = "error-crates.cache";
     // use default branch master
     const REMOTE_BRANCH: &str = "master";
     // use default name origin
     const REMOTE_NAME: &str = "origin";
-
 }
 
 impl Default for CrateIndex {
@@ -98,7 +101,7 @@ impl Default for CrateIndex {
             dist_path: home_path.join("freighter/dist"),
             thread_count: 16,
             upload: false,
-            config_path: home_path.join("freighter/config.toml")
+            work_dir: home_path,
         }
     }
 }
@@ -149,7 +152,7 @@ pub enum DependencyKind {
     Dev,
 }
 
-/// CrateIndex impl provide several functions to for sync steps: like clone, pull, download 
+/// CrateIndex impl provide several functions to for sync steps: like clone, pull, download
 ///
 ///
 impl CrateIndex {
@@ -161,8 +164,9 @@ impl CrateIndex {
             log_path: work_dir.join("freighter/log"),
             rustup_path: work_dir.join("freighter/rustup"),
             dist_path: work_dir.join("freighter/dist"),
-            config_path: work_dir.join("freighter/config.toml"),
-            ..Default::default()}
+            work_dir,
+            ..Default::default()
+        }
     }
 
     /// Get the `path` of this `CrateIndex`.
@@ -172,9 +176,8 @@ impl CrateIndex {
 
     /// Check the destination path is a git repository and pull
     pub fn git_pull(&self, opts: &SyncOptions) -> FreightResult {
-
         let repo = get_repo(self.path.clone());
-        
+
         if crates_io_index_check(&repo) {
             let mut remote = repo.find_remote(CrateIndex::REMOTE_NAME).unwrap();
             let object = repo.revparse_single(CrateIndex::REMOTE_BRANCH)?;
@@ -182,10 +185,17 @@ impl CrateIndex {
             let fetch_commit = do_fetch(&repo, &[CrateIndex::REMOTE_BRANCH], &mut remote, opts)?;
 
             self.generate_commit_record(&commit.id(), &fetch_commit.id());
-            println!("commit id：{}， remote id :{}", commit.id(), &fetch_commit.id());
+            println!(
+                "commit id：{}， remote id :{}",
+                commit.id(),
+                &fetch_commit.id()
+            );
             do_merge(&repo, CrateIndex::REMOTE_BRANCH, fetch_commit)
         } else {
-            panic!("Target path is not a crates index: {}", &self.path.to_str().unwrap());
+            panic!(
+                "Target path is not a crates index: {}",
+                &self.path.to_str().unwrap()
+            );
         }
     }
 
@@ -233,7 +243,10 @@ impl CrateIndex {
         let object = repo.revparse_single(CrateIndex::REMOTE_BRANCH)?;
         let commit = object.peel_to_commit()?;
         // first commit of crates.io-index
-        self.generate_commit_record(&Oid::from_str("83ef4b3aa2e01d0cba0d267a68780aec797dd5f1").unwrap(), &commit.id());
+        self.generate_commit_record(
+            &Oid::from_str("83ef4b3aa2e01d0cba0d267a68780aec797dd5f1").unwrap(),
+            &commit.id(),
+        );
         Ok(())
     }
 
@@ -252,11 +265,18 @@ impl CrateIndex {
                     File::create(file_name).unwrap()
                 }
                 other_error => panic!("something wrong: {}", other_error),
-            }
+            },
         };
         // save record commit id only id does not matches
         if start_commit_id != end_commit_id {
-            writeln!(f, "{},{},{}", start_commit_id, end_commit_id, now.timestamp()).unwrap();
+            writeln!(
+                f,
+                "{},{},{}",
+                start_commit_id,
+                end_commit_id,
+                now.timestamp()
+            )
+            .unwrap();
         }
     }
 
@@ -278,11 +298,12 @@ impl CrateIndex {
     ///   URL_s3_primary: "https://crates-io.s3-us-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
     ///   URL_s3_fallback: "https://crates-io-fallback.s3-eu-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
     /// ```
-    pub fn full_downloads(&self) -> FreightResult {
+    pub fn full_downloads(&self, config: &Config) -> FreightResult {
         let pool = ThreadPool::new(self.thread_count);
         let err_record = open_file_with_mutex(&self.log_path);
-        
-        WalkDir::new(self.path()).into_iter()
+
+        WalkDir::new(self.path())
+            .into_iter()
             .filter_entry(|e| self.is_not_hidden(e))
             .filter_map(|v| v.ok())
             .for_each(|x| {
@@ -293,40 +314,27 @@ impl CrateIndex {
                     for line in buffered.lines() {
                         let line = line.unwrap();
                         let c: Crate = serde_json::from_str(&line).unwrap();
-                        let url = format!("https://static.crates.io/crates/{}/{}-{}.crate", &c.name, &c.name, &c.vers);
-                        let folder = self.crates_path.join(&c.name);
-                        let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
-
-                        if !folder.exists() {
-                            fs::create_dir_all(&folder).unwrap();
-                        }
-                        let upload = self.upload;
+                        let index = self.clone();
+                        let config = config.clone();
                         let err_record = Arc::clone(&err_record);
-                        pool.execute(move|| {
-                            match download_file(&url, &file, Some(&c.cksum), false) {
-                                Ok(download_succ) => if download_succ && upload {
-                                    upload_file(file.to_str().unwrap(), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str()).unwrap();
-                                },
-                                Err(err) => {
-                                    let mut err_file = err_record.lock().unwrap();
-                                    writeln!(err_file, "{}-{}.crate, {}", &c.name, &c.vers, Utc::now().timestamp()).unwrap();
-                                    println!("{:?}", err);
-                                }
-                            }
+                        pool.execute(move || {
+                            download_crates_with_log(
+                                index,
+                                config,
+                                c,
+                                err_record,
+                            );
                         });
                     }
                 }
             });
 
-            pool.join();
+        pool.join();
 
-            println!("sync ends with {} task failed",  pool.panic_count());
+        println!("sync ends with {} task failed", pool.panic_count());
         Ok(())
     }
-
-
 }
-
 
 /// Print progressbar while clone data from git
 ///
@@ -387,10 +395,17 @@ pub fn pull(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
     let index_dir = Path::new(index.path.as_path());
     // try to remove index dir if it's empty
     if index_dir.exists() {
-        if !index_dir.read_dir().unwrap().filter_map(|x| x.ok()).any(|e|
-            !e.file_name().to_str().unwrap().contains("git")) {
-            println!("It seems last task has been broken and {} is empty, 
-            freighter had to removed this index, and then run init again", index_dir.display());
+        if !index_dir
+            .read_dir()
+            .unwrap()
+            .filter_map(|x| x.ok())
+            .any(|e| !e.file_name().to_str().unwrap().contains("git"))
+        {
+            println!(
+                "It seems last task has been broken and {} is empty, 
+            freighter had to removed this index, and then run init again",
+                index_dir.display()
+            );
             match fs::remove_dir_all(index_dir) {
                 Ok(_) => index.git_clone(opts).unwrap(),
                 Err(e) => panic!("Remove index failed, try to delete it manualy: {}", e),
@@ -405,26 +420,36 @@ pub fn pull(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
 }
 
 /// full download and Incremental download from registry
-pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
+pub fn download(index: CrateIndex, config: &Config, opts: &mut SyncOptions) -> FreightResult {
     if opts.init {
-        index.full_downloads().unwrap();
+        index.full_downloads(config).unwrap();
     } else {
-        let it = WalkDir::new(&index.log_path).into_iter()
-        .filter_entry(|e| e.file_name().to_str().unwrap().contains(&Utc::now().date().to_string()) || e.file_type().is_dir())
-        .filter_map(|v| v.ok());
+        let it = WalkDir::new(&index.log_path)
+            .into_iter()
+            .filter_entry(|e| {
+                e.file_name()
+                    .to_str()
+                    .unwrap()
+                    .contains(&Utc::now().date().to_string())
+                    || e.file_type().is_dir()
+            })
+            .filter_map(|v| v.ok());
         let mut input = match it.last() {
             Some(dir) => {
                 if dir.file_type().is_file() {
-                    OpenOptions::new().read(true).write(true).open(dir.path()).unwrap()
+                    OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open(dir.path())
+                        .unwrap()
                 } else {
                     panic!("Cannot get record file, run freighter sync pull before download")
                 }
-            },
+            }
             None => panic!("Did you forget to run freighter sync pull before download?"),
         };
         let buffered = BufReader::new(&mut input);
         println!("crates.io-index modified:");
-        let pool = ThreadPool::new(index.thread_count);
         let err_record = open_file_with_mutex(&index.log_path);
         // get last line of record file
         let mut lines: Vec<String> = buffered.lines().map(|line| line.unwrap()).collect();
@@ -432,15 +457,12 @@ pub fn download(index: CrateIndex, opts: &mut SyncOptions) -> FreightResult {
         if let Some(line) = lines.first() {
             let vec: Vec<&str> = line.split(',').collect();
             println!("{:?}", line);
-            git2_diff(&index, vec[0], vec[1], &pool, err_record).unwrap();
+            git2_diff(&index, config, vec[0], vec[1], err_record).unwrap();
         }
-        pool.join();
     }
 
     Ok(())
 }
-
-
 
 pub fn upload_to_s3(index: CrateIndex, bucket_name: &str) -> FreightResult {
     let sync_paths = [&index.crates_path, &index.rustup_path, &index.dist_path];
@@ -450,7 +472,6 @@ pub fn upload_to_s3(index: CrateIndex, bucket_name: &str) -> FreightResult {
     Ok(())
 }
 
-
 /// get repo from path
 pub fn get_repo(path: PathBuf) -> Repository {
     let path = path.to_str().unwrap_or(".");
@@ -458,20 +479,40 @@ pub fn get_repo(path: PathBuf) -> Repository {
         Ok(repo) => repo,
         Err(e) => match e.code() {
             ErrorCode::NotFound => {
-                panic!("index path: {} not found, please execute freighter sync pull first", &path);
+                panic!(
+                    "index path: {} not found, please execute freighter sync pull first",
+                    &path
+                );
             }
             _other_error => panic!("Target path is not a git repository: {}", e),
-        }
+        },
     }
 }
 
-pub fn git2_diff(index: &CrateIndex, from_oid: &str, to_oid: &str, pool: &ThreadPool, file: Arc<Mutex<File>>) -> Result<(), anyhow::Error>{
+pub fn git2_diff(
+    index: &CrateIndex,
+    config: &Config,
+    from_oid: &str,
+    to_oid: &str,
+    file: Arc<Mutex<File>>,
+) -> Result<(), anyhow::Error> {
     let repo = get_repo(index.path.clone());
     let t1 = tree_to_treeish(&repo, from_oid)?;
     let t2 = tree_to_treeish(&repo, to_oid)?;
     let mut opts = DiffOptions::new();
-    let diff = repo.diff_tree_to_tree(t1.unwrap().as_tree(), t2.unwrap().as_tree(), Some(&mut opts))?;
-    diff.print(DiffFormat::NameOnly, |_d, _h, l| handle_diff_line(l, index, pool, &file))?;
+    let diff = repo.diff_tree_to_tree(
+        t1.unwrap().as_tree(),
+        t2.unwrap().as_tree(),
+        Some(&mut opts),
+    )?;
+    let pool = ThreadPool::new(index.thread_count);
+
+    diff.print(DiffFormat::NameOnly, |_d, _h, l| {
+        handle_diff_line(l, index, config, &pool, &file)
+    })?;
+
+    pool.join();
+
     Ok(())
 }
 
@@ -479,12 +520,16 @@ pub fn git2_diff(index: &CrateIndex, from_oid: &str, to_oid: &str, pool: &Thread
 fn handle_diff_line(
     line: DiffLine,
     index: &CrateIndex,
+    config: &Config,
     pool: &ThreadPool,
-    err_record: &Arc<Mutex<File>>
+    err_record: &Arc<Mutex<File>>,
 ) -> bool {
-    let path_suffix = str::from_utf8(line.content()).unwrap().strip_suffix('\n').unwrap();
+    let path_suffix = str::from_utf8(line.content())
+        .unwrap()
+        .strip_suffix('\n')
+        .unwrap();
     if path_suffix.eq("config.json") {
-        return true
+        return true;
     }
     let crate_path = index.path.join(path_suffix);
     match File::open(&crate_path) {
@@ -494,36 +539,26 @@ fn handle_diff_line(
             for line in buffered.lines() {
                 let line = line.unwrap();
                 let c: Crate = serde_json::from_str(&line).unwrap();
-
-                let url = format!("https://static.crates.io/crates/{}/{}-{}.crate", &c.name, &c.name, &c.vers);
-                let folder = index.crates_path.join(&c.name);
-                let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
-
-                if !folder.exists() {
-                    fs::create_dir_all(&folder).unwrap();
-                }
-                let upload = index.upload;
                 let err_record = Arc::clone(err_record);
+                let index = index.to_owned();
+                let config = config.to_owned();
                 pool.execute(move || {
-                    match download_file(&url, &file, Some(&c.cksum), false) {
-                        Ok(download_succ) => if download_succ && upload {
-                            upload_file(file.to_str().unwrap(), &c.name, format!("{}-{}.crate", &c.name, &c.vers).as_str()).unwrap();
-                        },
-                        Err(err) => {
-                            let mut err_file = err_record.lock().unwrap();
-                            writeln!(err_file, "{}-{}.crate, {}", &c.name, &c.vers, Utc::now().timestamp()).unwrap();
-                            println!("{:?}", err);
-                        }
-                    }
+                    download_crates_with_log(index, config, c, err_record);
                 });
             }
-        },
+        }
         Err(err) => match err.kind() {
             ErrorKind::NotFound => {
-                println!("This file might have been removed from crates.io:{}", &crate_path.display());
+                println!(
+                    "This file might have been removed from crates.io:{}",
+                    &crate_path.display()
+                );
             }
-            other_error => panic!("something wrong while open the crates file: {}", other_error),
-        }
+            other_error => panic!(
+                "something wrong while open the crates file: {}",
+                other_error
+            ),
+        },
     };
 
     true
@@ -535,11 +570,9 @@ pub fn open_file_with_mutex(log_path: &Path) -> Arc<Mutex<File>> {
     let err_record = match OpenOptions::new().write(true).append(true).open(&file_name) {
         Ok(f) => Arc::new(Mutex::new(f)),
         Err(err) => match err.kind() {
-            ErrorKind::NotFound => {
-                Arc::new(Mutex::new(File::create(&file_name).unwrap()))
-            }
+            ErrorKind::NotFound => Arc::new(Mutex::new(File::create(&file_name).unwrap())),
             other_error => panic!("something wrong: {}", other_error),
-        }
+        },
     };
     err_record
 }
@@ -556,12 +589,11 @@ fn tree_to_treeish<'a>(
     Ok(Some(tree))
 }
 
-
 /// Check the destination path is a crates-io index
 pub fn crates_io_index_check(repo: &Repository) -> bool {
     let remote_name = &String::from("origin");
     let remote = repo.find_remote(remote_name).unwrap();
-    let url = remote.url().unwrap(); 
+    let url = remote.url().unwrap();
     println!("current remote registry is: {}", url);
     if CrateIndex::CRATE_REGISTRY.contains(&url) {
         true
@@ -575,7 +607,7 @@ fn do_fetch<'a>(
     repo: &'a Repository,
     refs: &[&str],
     remote: &'a mut git2::Remote,
-    opts:& SyncOptions,
+    opts: &SyncOptions,
 ) -> Result<git2::AnnotatedCommit<'a>, git2::Error> {
     let mut cb = RemoteCallbacks::new();
 
@@ -661,7 +693,6 @@ fn fast_forward(
     Ok(())
 }
 
-
 /// Add a merge commit and set working tree to match head
 fn normal_merge(
     repo: &Repository,
@@ -696,9 +727,7 @@ fn normal_merge(
         &[&local_commit, &remote_commit],
     )?;
     // Set working tree to match head.
-    repo.checkout_head(Some(
-        CheckoutBuilder::default().force(),
-    ))?;
+    repo.checkout_head(Some(CheckoutBuilder::default().force()))?;
     Ok(())
 }
 

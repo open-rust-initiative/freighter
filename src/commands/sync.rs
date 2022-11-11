@@ -96,7 +96,7 @@ EXAMPLES
 ///
 ///
 ///
-pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
+pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
     let mut index = match args.get_one::<String>("work-dir").cloned() {
         Some(work_dir) => CrateIndex::new(PathBuf::from(work_dir)),
         None => {
@@ -105,6 +105,8 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
             index
         }
     };
+
+    let config = config.load(&index.work_dir);
 
     match args.get_one::<usize>("thread-count").cloned() {
         Some(thread_count) => index.thread_count = thread_count,
@@ -126,6 +128,7 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
             index.upload = args.get_flag("upload");
             download(
                 index,
+                &config,
                 &mut SyncOptions {
                     no_progressbar,
                     init: args.get_flag("init"),
@@ -134,6 +137,7 @@ pub fn exec(_config: &mut Config, args: &ArgMatches) -> FreightResult {
         }
         Some(("rustup", args)) => sync_rustup(
             index,
+            &config,
             RustUpOptions {
                 clean: args.get_flag("clean"),
                 version: args.get_one::<String>("version").cloned(),

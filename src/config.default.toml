@@ -96,3 +96,6 @@ sync_nightly_days = 30
 
 # days you want to keep for historical beta version
 sync_beta_days = 30
+
+# download crates from source
+crates_source = "https://static.crates.io/crates"

@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     fs::{self, DirEntry},
-    io::ErrorKind,
     path::{Path, PathBuf},
 };
 
@@ -12,7 +11,7 @@ use walkdir::WalkDir;
 
 use crate::{
     download::{download_file, download_file_with_sha},
-    errors::{FreightResult, FreighterError},
+    errors::{FreightResult, FreighterError}, config::Config,
 };
 
 use super::index::CrateIndex;
@@ -136,13 +135,6 @@ pub struct Target {
     pub xz_hash: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    pub sync_stable_versions: Vec<String>,
-    pub sync_nightly_days: i64,
-    pub sync_beta_days: i64,
-}
-
 #[derive(Default)]
 pub struct RustUpOptions {
     /// Whether to clean historical versions.
@@ -152,10 +144,9 @@ pub struct RustUpOptions {
 }
 
 /// entrance function
-pub fn sync_rustup(index: CrateIndex, opts: RustUpOptions) -> FreightResult {
+pub fn sync_rustup(index: CrateIndex, config: &Config, opts: RustUpOptions) -> FreightResult {
     // step1: sync rustup init file
     sync_rustup_init(&index)?;
-    let config = get_config(&index).unwrap();
     if let Some(version) = opts.version {
         // step2.1 : sync input channel version
         sync_channel(&index, &version)?;
@@ -275,29 +266,7 @@ pub fn parse_channel_file(path: &Path) -> Result<Vec<(String, String)>, Freighte
     Ok(res)
 }
 
-// read channel list from config file, if config file don't exist then it will be created from default file
-pub fn get_config(index: &CrateIndex) -> Result<Config, FreighterError> {
-    let content = match fs::read_to_string(&index.config_path) {
-        Ok(content) => content,
-        Err(err) => match err.kind() {
-            ErrorKind::NotFound => {
-                if let Some(parent) = index.config_path.parent() {
-                    if !parent.exists() {
-                        fs::create_dir_all(parent).unwrap();
-                    }
-                }
-                fs::write(&index.config_path, include_str!("config.default.toml"))?;
-                fs::read_to_string(&index.config_path).unwrap()
-            }
-            other_error => panic!("Can't read config file: {}", other_error),
-        },
-    };
-    let config: Config = match toml::from_str(&content) {
-        Ok(config) => config,
-        Err(_) => panic!("Config file doesn't match, maybe it's outdated or you have provided a invalid value, you can manaully delete it and try again"),
-    };
-    Ok(config)
-}
+
 
 pub fn clean_historical_version(index: &CrateIndex, channels: (&str, i64)) -> FreightResult {
     let (channel, sync_days) = channels;

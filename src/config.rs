@@ -18,7 +18,8 @@ pub struct Config {
     pub sync_stable_versions: Vec<String>,
     pub sync_nightly_days: i64,
     pub sync_beta_days: i64,
-    pub crates_source: String,
+    pub crates_domain: String,
+    pub rustup_domain: String,
 }
 
 ///
@@ -28,7 +29,8 @@ impl Config {
             sync_stable_versions: [].to_vec(),
             sync_nightly_days: 30,
             sync_beta_days: 30,
-            crates_source: String::from("https://static.crates.io/crates"),
+            crates_domain: String::from("https://static.crates.io/crates"),
+            rustup_domain: String::new(),
         }
     }
 

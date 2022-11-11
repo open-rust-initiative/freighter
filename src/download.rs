@@ -52,7 +52,7 @@ pub fn download_crates_with_log(
 ) {
     let url = format!(
         "{}/{}/{}-{}.crate",
-        config.crates_source, &c.name, &c.name, &c.vers
+        config.crates_domain, &c.name, &c.name, &c.vers
     );
     let folder = index.crates_path.join(&c.name);
     let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
@@ -160,7 +160,8 @@ pub fn upload_file(file: &str, folder: &str, filename: &str) -> FreightResult {
     Ok(())
 }
 
-pub fn sync_folder(folder: &PathBuf, bucket: &str) -> FreightResult {
+pub fn sync_folder(folder: &str, bucket: &str) -> FreightResult {
+    println!("trying to upload folder {} to s3", folder);
     let status = std::process::Command::new("s3cmd")
         .arg("sync")
         .arg(folder)

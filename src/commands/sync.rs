@@ -66,6 +66,10 @@ pub fn cli() -> clap::Command {
             .value_parser(value_parser!(usize))
             .required(false)
         )
+        .arg(
+            arg!(-d --"domain" <VALUE> "specify the source you want to sync from")
+            .required(false)
+        )
         .help_template(
             "\
 Sync the crates index and crate files from the upstream(crates.io) to the local filesystem, other cloud
@@ -106,7 +110,8 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         }
     };
 
-    let config = config.load(&index.work_dir);
+    let mut config = config.load(&index.work_dir);
+    let domain = args.get_one::<String>("domain").cloned();
 
     match args.get_one::<usize>("thread-count").cloned() {
         Some(thread_count) => index.thread_count = thread_count,
@@ -126,6 +131,9 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         )?,
         Some(("download", args)) => {
             index.upload = args.get_flag("upload");
+            if let Some(source) = domain {
+                config.crates_domain = source;
+            }
             download(
                 index,
                 &config,

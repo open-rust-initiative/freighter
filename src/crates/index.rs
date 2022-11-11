@@ -467,7 +467,7 @@ pub fn download(index: CrateIndex, config: &Config, opts: &mut SyncOptions) -> F
 pub fn upload_to_s3(index: CrateIndex, bucket_name: &str) -> FreightResult {
     let sync_paths = [&index.crates_path, &index.rustup_path, &index.dist_path];
     for path in sync_paths {
-        sync_folder(path, bucket_name).unwrap();
+        sync_folder(path.to_str().unwrap(), bucket_name).unwrap();
     }
     Ok(())
 }

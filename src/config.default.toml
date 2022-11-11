@@ -97,5 +97,8 @@ sync_nightly_days = 30
 # days you want to keep for historical beta version
 sync_beta_days = 30
 
-# download crates from source
-crates_source = "https://static.crates.io/crates"
+# download crates from domain
+crates_domain = "https://static.crates.io/crates"
+
+# download rustup from domain
+rustup_domain = "https://static.rust-lang.org"

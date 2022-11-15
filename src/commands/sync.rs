@@ -30,24 +30,26 @@ use clap::{arg, ArgMatches};
 
 use crate::config::Config;
 use crate::crates::command_prelude::*;
-use crate::crates::index::{download, pull, upload_to_s3, CrateIndex, SyncOptions};
-use crate::crates::rustup::{sync_rustup, RustUpOptions};
+use crate::crates::crates::{download, upload_to_s3, SyncOptions};
+use crate::crates::index::{pull, CrateIndex};
 use crate::errors::FreightResult;
 
 /// The __sync__ subcommand
 ///
 
 pub fn cli() -> clap::Command {
-    clap::Command::new("sync")
-        .subcommand(subcommand("pull"))
-        .subcommand(subcommand("rustup")
-            .arg(flag("clean", "clean up historical versions"))
-            .arg(arg!(-v --"version" <VALUE> "download only specified version"))
+    clap::Command::new("crates")
+        .arg(flag("no-progressbar", "Hide progressbar when start sync"))
+        .arg(arg!(-c --"work-dir" <FILE> "specify the work dir,
+         where to downlaod crates, rust toolchains and storage logs, default: $HOME/.freighter")
         )
+        .arg(arg!(-t --"thread-count" <VALUE> "specify the download thread count,default will be 16")
+            .value_parser(value_parser!(usize))
+        )
+        .arg(arg!(-d --"domain" <VALUE> "specify the source you want to sync from"))
+        .subcommand(subcommand("pull"))
         .subcommand(subcommand("upload")
-        .arg(
-            arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files")
-            .required(true)
+        .arg(arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files").required(true)
         ))
         .subcommand(subcommand("download")
             .arg(flag("init", "Start init download of crates file, this will traverse all index for full download"))
@@ -56,20 +58,6 @@ pub fn cli() -> clap::Command {
         .subcommand_required(true)
         .arg_required_else_help(true)
         .about("Sync the crates from the upstream(crates.io) to the local registry")
-        .arg(flag("no-progressbar", "Hide progressbar when start sync"))
-        .arg(
-            arg!(-c --"work-dir" <FILE> "specify the work dir, which contains crates path, index path and log path, default: $HOME/.freighter")
-            .required(false)
-        )
-        .arg(
-            arg!(-t --"thread-count" <VALUE> "specify the download thread count, default will be 16")
-            .value_parser(value_parser!(usize))
-            .required(false)
-        )
-        .arg(
-            arg!(-d --"domain" <VALUE> "specify the source you want to sync from")
-            .required(false)
-        )
         .help_template(
             "\
 Sync the crates index and crate files from the upstream(crates.io) to the local filesystem, other cloud
@@ -101,59 +89,52 @@ EXAMPLES
 ///
 ///
 pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
-    let mut index = match args.get_one::<String>("work-dir").cloned() {
-        Some(work_dir) => CrateIndex::new(PathBuf::from(work_dir)),
-        None => {
-            let index: CrateIndex = Default::default();
-            println!("use default crates path: {}", index.crates_path.display());
-            index
-        }
+    let work_dir = config
+        .work_dir
+        .as_ref()
+        .expect("something bad happened because work_dir is none");
+    let index = CrateIndex::new(PathBuf::from(work_dir));
+
+    let opts = &mut SyncOptions {
+        ..Default::default()
     };
 
-    let mut config = config.load(&index.work_dir);
+    // let mut index = match args.get_one::<String>("work-dir").cloned() {
+    //     Some(work_dir) => CrateIndex::new(PathBuf::from(work_dir)),
+    //     None => {
+    //         let index: CrateIndex = Default::default();
+    //         println!("use default crates path: {}", index.crates_path.display());
+    //         index
+    //     }
+    // };
+
+    let mut config = &mut config.crates;
+
     let domain = args.get_one::<String>("domain").cloned();
 
     match args.get_one::<usize>("thread-count").cloned() {
-        Some(thread_count) => index.thread_count = thread_count,
-        None => println!("use default thread count: {}", index.thread_count),
+        Some(thread_count) => opts.config.download_threads = thread_count,
+        None => println!("use default thread count: {}", opts.config.download_threads),
     };
 
-    println!("CrateIndex info : {:#?}", index);
-    let no_progressbar = args.get_flag("no-progressbar");
+    println!("SyncOptions info : {:#?}", opts);
+
+    opts.no_progressbar = args.get_flag("no-progressbar");
 
     match args.subcommand() {
-        Some(("pull", _args)) => pull(
-            index,
-            &mut SyncOptions {
-                no_progressbar,
-                init: false,
-            },
-        )?,
+        Some(("pull", _args)) => pull(opts)?,
         Some(("download", args)) => {
-            index.upload = args.get_flag("upload");
+            opts.upload = args.get_flag("upload");
+            opts.init_download = args.get_flag("init");
+
             if let Some(source) = domain {
-                config.crates_domain = source;
+                config.domain = source;
             }
-            download(
-                index,
-                &config,
-                &mut SyncOptions {
-                    no_progressbar,
-                    init: args.get_flag("init"),
-                },
-            )?
+            download(opts)?
         }
-        Some(("rustup", args)) => sync_rustup(
-            index,
-            &config,
-            RustUpOptions {
-                clean: args.get_flag("clean"),
-                version: args.get_one::<String>("version").cloned(),
-            },
-        )?,
         Some(("upload", args)) => {
             let bucket = args.get_one::<String>("bucket").cloned().unwrap();
-            upload_to_s3(index, &bucket)?
+            upload_to_s3(opts, &bucket)?
         }
         Some((cmd, _)) => {
             unreachable!("unexpected command {}", cmd)

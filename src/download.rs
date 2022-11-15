@@ -6,20 +6,19 @@
 //!
 
 use std::io::Write;
+use std::path::PathBuf;
 use std::{
     fs::{self, File},
     io,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, Mutex},
 };
 
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 
-use crate::config::Config;
-use crate::crates::index::CrateIndex;
+use crate::crates::crates::Crate;
 use crate::{
-    crates::index::{Crate},
     errors::{FreightResult, FreighterError},
 };
 
@@ -45,20 +44,21 @@ pub fn download_file_with_sha(
 }
 
 pub fn download_crates_with_log(
-    index: CrateIndex,
-    config: Config,
+    path: PathBuf,
+    upload: bool,
+    url: String,
     c: Crate,
     err_record: Arc<Mutex<File>>,
 ) {
     let url = format!(
         "{}/{}/{}-{}.crate",
-        config.crates_domain, &c.name, &c.name, &c.vers
+        url, &c.name, &c.name, &c.vers
     );
-    let folder = index.crates_path.join(&c.name);
+    let folder = path.join(&c.name);
     let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
     match download_file(&url, &file, Some(&c.cksum), false) {
         Ok(download_succ) => {
-            if download_succ && index.upload {
+            if download_succ && upload {
                 upload_file(
                     file.to_str().unwrap(),
                     &c.name,

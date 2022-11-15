@@ -4,11 +4,13 @@
 //!
 //!
 
-use clap::ArgMatches;
+use std::path::PathBuf;
+
+use clap::{arg, ArgMatches};
 
 use crate::commands;
 use crate::config::Config;
-use crate::errors::{FreighterError, FreightResult};
+use crate::errors::{FreightResult, FreighterError};
 
 ///
 ///
@@ -20,11 +22,18 @@ pub type App = clap::Command;
 
 ///
 ///
-pub fn main(_config: &mut Config) -> FreightResult {
-    let mut config = Config::new();
+pub fn main(config: &mut Config) -> FreightResult {
+    // let mut config = Config::new();
 
     let args = cli().try_get_matches()?;
     // let cmd = args.subcommand_name().unwrap();
+
+    let work_dir = match args.get_one::<String>("work-dir").cloned() {
+        Some(work_dir) => PathBuf::from(work_dir),
+        None => dirs::home_dir().unwrap(),
+    };
+    let mut config = config.load(&work_dir);
+    config.work_dir = Some(work_dir);
 
     let (cmd, subcommand_args) = match args.subcommand() {
         Some((cmd, args)) => (cmd, args),
@@ -49,6 +58,9 @@ fn cli() -> App {
         .disable_help_subcommand(true)
         .override_usage(usage)
         .author("Open Rust Initiative")
+        .arg(arg!(-c --"work-dir" <FILE> "specify the work dir,
+             where to downlaod crates, rust toolchains and storage logs, default: $HOME/.freighter")
+        )
         .help_template(
             "\
 Freight - A crate registry from the Open Rust Initiative Community
@@ -63,7 +75,6 @@ See 'freight help <command>' for more information on a specific command.\n"
         )
         .subcommands(commands::builtin())
 }
-
 
 ///
 ///

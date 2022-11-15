@@ -12,35 +12,48 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-///
-#[derive(Serialize, Deserialize, Debug, Clone)]
+/// 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
+    pub work_dir: Option<PathBuf>,
+    pub crates: CratesConfig,
+    pub rustup: RustUpConfig,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct CratesConfig {
+    pub index_domain: String,
+    pub domain: String,
+    pub download_threads: usize,
+}
+
+/// config for rustup mirror sync 
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct RustUpConfig {
+    pub domain: String,
+    pub download_threads: i64,
     pub sync_stable_versions: Vec<String>,
     pub sync_nightly_days: i64,
     pub sync_beta_days: i64,
-    pub crates_domain: String,
-    pub rustup_domain: String,
 }
 
 ///
 impl Config {
     pub fn new() -> Config {
         Config {
-            sync_stable_versions: [].to_vec(),
-            sync_nightly_days: 30,
-            sync_beta_days: 30,
-            crates_domain: String::from("https://static.crates.io/crates"),
-            rustup_domain: String::new(),
+            work_dir: None,
+            rustup: RustUpConfig::default(),
+            crates: CratesConfig::default(),
         }
     }
 
-    pub fn config_path(home_path: &Path) -> PathBuf {
+    pub fn format_path(home_path: &Path) -> PathBuf {
         home_path.join("freighter/config.toml")
     }
 
-    pub fn load(&self, home_path: &Path) -> Config {
-        let config_path = Self::config_path(home_path);
-        Self::get_config(&config_path)
+    pub fn load(&self, path: &Path) -> Config {
+        let path = Self::format_path(path);
+        Self::get_config(&path)
     }
 
     // read channel list from config file, if config file don't exist then it will be created from default file

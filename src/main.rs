@@ -10,6 +10,7 @@ mod config;
 mod errors;
 mod commands;
 mod crates;
+mod cloud;
 mod download;
 
 ///

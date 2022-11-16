@@ -34,7 +34,7 @@ use threadpool::ThreadPool;
 
 use crate::errors::FreightResult;
 
-use super::crates::{parse_index_and_download, SyncOptions};
+use super::crates::{parse_index_and_download, CratesOptions};
 
 /// `CrateIndex` is a wrapper `Git Repository` that crates-io index.
 ///
@@ -44,13 +44,6 @@ pub struct CrateIndex {
     pub url: Url,
     /// index path
     pub path: PathBuf,
-    //download crates path
-    // pub crates_path: PathBuf,
-    // pub log_path: PathBuf,
-
-    // pub thread_count: usize,
-    // upload file after download
-    // pub upload: bool,
 }
 
 /// State contains the progress when download index file
@@ -68,7 +61,7 @@ impl Default for CrateIndex {
     fn default() -> CrateIndex {
         let home_path = dirs::home_dir().unwrap();
         CrateIndex {
-            url: Url::parse(CrateIndex::CRATE_REGISTRY[0]).unwrap(),
+            url: Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(),
             path: home_path.join("freighter/crates.io-index"),
         }
     }
@@ -79,17 +72,17 @@ impl Default for CrateIndex {
 ///
 impl CrateIndex {
     /// default crate registry
-    const CRATE_REGISTRY: [&str; 3] = ["https://github.com/rust-lang/crates.io-index.git", "", ""];
+    // const CRATE_REGISTRY: [&str; 3] = ["https://github.com/rust-lang/crates.io-index.git", "", ""];
     // use default branch master
     const REMOTE_BRANCH: &str = "master";
     // use default name origin
     const REMOTE_NAME: &str = "origin";
 
     /// Create a new `CrateIndex` from a `Work dir`.
-    pub fn new(work_dir: PathBuf) -> Self {
+    pub fn new(domain: &str, work_dir: PathBuf) -> Self {
         Self {
             path: work_dir.join("freighter/crates.io-index"),
-            ..Default::default()
+            url: Url::parse(domain).unwrap(),
         }
     }
 
@@ -99,34 +92,27 @@ impl CrateIndex {
     }
 
     /// Check the destination path is a git repository and pull
-    pub fn git_pull(&self, opts: &SyncOptions) -> FreightResult {
+    pub fn git_pull(&self, opts: &CratesOptions) -> FreightResult {
         let repo = get_repo(self.path.clone());
 
-        if crates_io_index_check(&repo) {
-            let mut remote = repo.find_remote(CrateIndex::REMOTE_NAME).unwrap();
-            let object = repo.revparse_single(CrateIndex::REMOTE_BRANCH)?;
-            let commit = object.peel_to_commit()?;
-            let fetch_commit = do_fetch(&repo, &[CrateIndex::REMOTE_BRANCH], &mut remote, opts)?;
+        let mut remote = repo.find_remote(CrateIndex::REMOTE_NAME).unwrap();
+        let object = repo.revparse_single(CrateIndex::REMOTE_BRANCH)?;
+        let commit = object.peel_to_commit()?;
+        let fetch_commit = do_fetch(&repo, &[CrateIndex::REMOTE_BRANCH], &mut remote, opts)?;
 
-            self.generate_commit_record(&opts.log_path, &commit.id(), &fetch_commit.id());
-            println!(
-                "commit id：{}， remote id :{}",
-                commit.id(),
-                &fetch_commit.id()
-            );
-            do_merge(&repo, CrateIndex::REMOTE_BRANCH, fetch_commit)
-        } else {
-            panic!(
-                "Target path is not a crates index: {}",
-                &self.path.to_str().unwrap()
-            );
-        }
+        self.generate_commit_record(&opts.log_path, &commit.id(), &fetch_commit.id());
+        println!(
+            "commit id:{}, remote id :{}",
+            commit.id(),
+            &fetch_commit.id()
+        );
+        do_merge(&repo, CrateIndex::REMOTE_BRANCH, fetch_commit)
     }
 
     /// Clone the `CrateIndex` to a local directory.
     ///
     ///
-    pub fn git_clone(&self, opts: &mut SyncOptions) -> FreightResult {
+    pub fn git_clone(&self, opts: &mut CratesOptions) -> FreightResult {
         println!("Starting git clone...");
         let state = RefCell::new(State {
             progress: None,
@@ -263,7 +249,7 @@ fn print(state: &mut State) {
 }
 
 /// If destination path is not empty, run pull instead of clone
-pub fn pull(opts: &mut SyncOptions) -> FreightResult {
+pub fn pull(opts: &mut CratesOptions) -> FreightResult {
     let index = opts.index.to_owned();
     if opts.no_progressbar {
         println!("no-progressbar has been set to true, it will not be displayed!");
@@ -313,7 +299,7 @@ pub fn get_repo(path: PathBuf) -> Repository {
 }
 
 pub fn git2_diff(
-    options: &SyncOptions,
+    options: &CratesOptions,
     from_oid: &str,
     to_oid: &str,
     file: Arc<Mutex<File>>,
@@ -342,7 +328,7 @@ pub fn git2_diff(
 /// Traversing directories in diff lines
 fn handle_diff_line(
     line: DiffLine,
-    opts: &SyncOptions,
+    opts: &CratesOptions,
     pool: &ThreadPool,
     err_record: &Arc<Mutex<File>>,
 ) -> bool {
@@ -370,25 +356,12 @@ fn tree_to_treeish<'a>(
     Ok(Some(tree))
 }
 
-/// Check the destination path is a crates-io index
-pub fn crates_io_index_check(repo: &Repository) -> bool {
-    let remote_name = &String::from("origin");
-    let remote = repo.find_remote(remote_name).unwrap();
-    let url = remote.url().unwrap();
-    println!("current remote registry is: {}", url);
-    if CrateIndex::CRATE_REGISTRY.contains(&url) {
-        true
-    } else {
-        panic!("Target url is not a crates index: {}", url)
-    }
-}
-
 /// fetch the remote commit and show callback progress
 fn do_fetch<'a>(
     repo: &'a Repository,
     refs: &[&str],
     remote: &'a mut git2::Remote,
-    opts: &SyncOptions,
+    opts: &CratesOptions,
 ) -> Result<git2::AnnotatedCommit<'a>, git2::Error> {
     let mut cb = RemoteCallbacks::new();
 
@@ -564,13 +537,15 @@ fn do_merge<'a>(
 mod tests {
     use std::path::PathBuf;
 
+    use crate::crates::crates::CratesOptions;
+
     #[test]
     fn test_clone() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("data/tests/fixtures/");
 
-        let mut index = super::CrateIndex::new(path);
-        index.url = url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap();
+        let index = super::CrateIndex::new("https://github.com/rust-lang/crates.io-index.git", path);
+        index.git_clone(&mut CratesOptions::default()).unwrap();
     }
 
     #[test]
@@ -578,7 +553,6 @@ mod tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("data/tests/fixtures/");
 
-        let mut index = super::CrateIndex::new(path);
-        index.url = url::Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap();
+        let index = super::CrateIndex::new("https://github.com/rust-lang/crates.io-index.git", path);
     }
 }

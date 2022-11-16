@@ -31,7 +31,7 @@ pub struct CratesConfig {
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct RustUpConfig {
     pub domain: String,
-    pub download_threads: i64,
+    pub download_threads: usize,
     pub sync_stable_versions: Vec<String>,
     pub sync_nightly_days: i64,
     pub sync_beta_days: i64,
@@ -75,7 +75,8 @@ impl Config {
         };
         match toml::from_str(&content) {
             Ok(config) => config,
-            Err(_) => panic!("Config file doesn't match, maybe it's outdated or you have provided a invalid value, you can manaully delete it and try again"),
+            Err(err) => panic!("Config file doesn't match, maybe it's outdated or you have provided a invalid value, 
+            you can manaully delete it and try again. Caused by {}", err),
         }
     }
 }

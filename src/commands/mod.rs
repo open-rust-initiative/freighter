@@ -11,6 +11,7 @@ use crate::config::Config;
 use crate::errors::FreightResult;
 
 pub(crate) mod sync;
+pub(crate) mod rustup;
 
 /// The builtin function is the entry point of commands mod. Each subcommand is a
 /// `clap::Command<'static>` type, and the `exec` function is logic entry.
@@ -23,6 +24,7 @@ pub(crate) mod sync;
 pub fn builtin() -> Vec<App> {
     vec![
         sync::cli(),
+        rustup::cli(),
     ]
 }
 
@@ -33,6 +35,7 @@ pub fn builtin_exec(cmd: &str) -> Option<fn(&mut Config, &ArgMatches) -> Freight
     let f = match cmd {
         "sync" => sync::exec,
         "crates" => sync::exec,
+        "rustup" => rustup::exec,
         _ => return None,
     };
 

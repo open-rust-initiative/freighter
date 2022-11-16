@@ -10,11 +10,10 @@ use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
 use crate::{
+    config::RustUpConfig,
     download::{download_file, download_file_with_sha},
-    errors::{FreightResult, FreighterError}, config::{RustUpConfig},
+    errors::{FreightResult, FreighterError}, cloud::s3::{S3cmd, CloudStorage},
 };
-
-const RUSTUP_MIRROR: &str = "https://static.rust-lang.org";
 
 //rustup platforms list, sup
 const PLATFORMS: &[&str] = &[
@@ -130,7 +129,7 @@ pub struct Target {
     pub xz_hash: Option<String>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct RustUpOptions {
     pub config: RustUpConfig,
 
@@ -139,49 +138,31 @@ pub struct RustUpOptions {
     /// only sync that version
     pub version: Option<String>,
 
-    pub thread_count: usize,
-
-    pub upload_after_download: bool,
-
     pub rustup_path: PathBuf,
 
     pub dist_path: PathBuf,
 
-    pub work_dir: PathBuf,
+    pub no_progressbar: bool,
+
+    pub bucket_name: String,
 }
 
-// impl Default for RustUpOptions {
-//     fn default() -> RustUpOptions {
-//         RustUpOptions{
-//             clean: false,
-//             version: None,
-//         }
-//     }
-// }
-
-// impl From<CrateIndex> for RustUpOptions {
-//     fn from(index: CrateIndex) -> RustUpOptions {
-        
-//     }
-// }
-
-
 /// entrance function
-pub fn sync_rustup(opts: RustUpOptions) -> FreightResult {
+pub fn sync_rustup(opts: &RustUpOptions) -> FreightResult {
     let config = &opts.config;
     // step1: sync rustup init file
-    sync_rustup_init(&opts)?;
+    sync_rustup_init(opts)?;
     if let Some(version) = &opts.version {
         // step2.1 : sync input channel version
-        sync_channel(&opts, version)?;
+        sync_channel(opts, version)?;
     } else {
         // step2.2: sync latest stable,beta and nightly channel
-        sync_channel(&opts, "stable")?;
-        sync_channel(&opts, "beta")?;
-        sync_channel(&opts, "nightly")?;
+        sync_channel(opts, "stable")?;
+        sync_channel(opts, "beta")?;
+        sync_channel(opts, "nightly")?;
         // step2.3: sync specified channel version by config file
         config.sync_stable_versions.iter().for_each(|channel| {
-            sync_channel(&opts, channel).unwrap();
+            sync_channel(opts, channel).unwrap();
         });
     }
     // step3: clean historical channel files after sync
@@ -199,10 +180,10 @@ pub fn sync_rustup(opts: RustUpOptions) -> FreightResult {
 
 /// sync rustup init file
 pub fn sync_rustup_init(opts: &RustUpOptions) -> FreightResult {
-    let download_url = format!("{}/rustup/release-stable.toml", RUSTUP_MIRROR);
+    let download_url = format!("{}/rustup/release-stable.toml", opts.config.domain);
     let file = opts.rustup_path.join("release-stable.toml");
     download_file(&download_url, &file, None, true).unwrap();
-    let pool = ThreadPool::new(opts.thread_count);
+    let pool = ThreadPool::new(opts.config.download_threads);
     PLATFORMS.iter().for_each(|platform| {
         let rustup_path = opts.rustup_path.clone();
         let file_name = if platform.contains("windows") {
@@ -210,8 +191,9 @@ pub fn sync_rustup_init(opts: &RustUpOptions) -> FreightResult {
         } else {
             "rustup-init".to_owned()
         };
+        let domain = opts.config.domain.clone();
         pool.execute(move || {
-            let download_url = format!("{}/rustup/dist/{}/{}", RUSTUP_MIRROR, platform, file_name);
+            let download_url = format!("{}/rustup/dist/{}/{}", domain, platform, file_name);
             let folder = rustup_path.join("dist").join(platform);
             download_file_with_sha(&download_url, &folder, &file_name).unwrap();
         });
@@ -227,16 +209,16 @@ pub fn sync_channel(opts: &RustUpOptions, channel: &str) -> FreightResult {
     let file_folder;
     if let Some(date) = channel.strip_prefix("nightly-") {
         channel_name = String::from("channel-rust-nightly.toml");
-        channel_url = format!("{}/dist/{}/{}", RUSTUP_MIRROR, date, channel_name);
+        channel_url = format!("{}/dist/{}/{}", opts.config.domain, date, channel_name);
         file_folder = opts.dist_path.to_owned().join(date);
     } else {
         channel_name = format!("channel-rust-{}.toml", channel);
-        channel_url = format!("{}/dist/{}", RUSTUP_MIRROR, channel_name);
+        channel_url = format!("{}/dist/{}", opts.config.domain, channel_name);
         file_folder = opts.dist_path.to_owned();
     }
     match download_file_with_sha(&channel_url, &file_folder, &channel_name) {
         Ok(_) => {
-            let pool = ThreadPool::new(opts.thread_count);
+            let pool = ThreadPool::new(opts.config.download_threads);
             // parse_channel_file and download;
             let download_list = parse_channel_file(&file_folder.join(channel_name)).unwrap();
             download_list.into_iter().for_each(|(url, hash)| {
@@ -290,8 +272,6 @@ pub fn parse_channel_file(path: &Path) -> Result<Vec<(String, String)>, Freighte
     Ok(res)
 }
 
-
-
 pub fn clean_historical_version(dist_path: &PathBuf, channels: (&str, i64)) -> FreightResult {
     let (channel, sync_days) = channels;
     // filter dir less than sync_nightly_days ago
@@ -337,4 +317,14 @@ pub fn compare_date(entry: &DirEntry, sync_days: i64) -> bool {
     } else {
         false
     }
+}
+
+pub fn upload_to_s3(opts: &RustUpOptions) -> FreightResult {
+    let sync_paths = [&opts.rustup_path, &opts.dist_path];
+    // use s3cmd to upload folder
+    let s3cmd = S3cmd::default();
+    for path in sync_paths {
+        s3cmd.upload_folder(path.to_str().unwrap(), &opts.bucket_name).unwrap();
+    }
+    Ok(())
 }

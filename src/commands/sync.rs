@@ -24,13 +24,11 @@
 //!     - Ceph
 //!
 
-use std::path::PathBuf;
-
 use clap::{arg, ArgMatches};
 
 use crate::config::Config;
 use crate::crates::command_prelude::*;
-use crate::crates::crates::{download, upload_to_s3, SyncOptions};
+use crate::crates::crates::{download, upload_to_s3, CratesOptions};
 use crate::crates::index::{pull, CrateIndex};
 use crate::errors::FreightResult;
 
@@ -40,10 +38,7 @@ use crate::errors::FreightResult;
 pub fn cli() -> clap::Command {
     clap::Command::new("crates")
         .arg(flag("no-progressbar", "Hide progressbar when start sync"))
-        .arg(arg!(-c --"work-dir" <FILE> "specify the work dir,
-         where to downlaod crates, rust toolchains and storage logs, default: $HOME/.freighter")
-        )
-        .arg(arg!(-t --"thread-count" <VALUE> "specify the download thread count,default will be 16")
+        .arg(arg!(-t --"download-threads" <VALUE> "specify the download thread count,default will be 16")
             .value_parser(value_parser!(usize))
         )
         .arg(arg!(-d --"domain" <VALUE> "specify the source you want to sync from"))
@@ -93,48 +88,43 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         .work_dir
         .as_ref()
         .expect("something bad happened because work_dir is none");
-    let index = CrateIndex::new(PathBuf::from(work_dir));
 
-    let opts = &mut SyncOptions {
+    let opts = &mut CratesOptions {
+        config: config.crates.to_owned(),
+        index: CrateIndex::new(&config.crates.index_domain, work_dir.to_owned()),
+        no_progressbar: args.get_flag("no-progressbar"),
+        crates_path: work_dir.join("freighter/crates"),
+        log_path: work_dir.join("freighter/log"),
         ..Default::default()
     };
-
-    // let mut index = match args.get_one::<String>("work-dir").cloned() {
-    //     Some(work_dir) => CrateIndex::new(PathBuf::from(work_dir)),
-    //     None => {
-    //         let index: CrateIndex = Default::default();
-    //         println!("use default crates path: {}", index.crates_path.display());
-    //         index
-    //     }
-    // };
-
-    let mut config = &mut config.crates;
-
     let domain = args.get_one::<String>("domain").cloned();
 
-    match args.get_one::<usize>("thread-count").cloned() {
-        Some(thread_count) => opts.config.download_threads = thread_count,
+    match args.get_one::<usize>("download-threads").cloned() {
+        Some(download_threads) => opts.config.download_threads = download_threads,
         None => println!("use default thread count: {}", opts.config.download_threads),
     };
 
-    println!("SyncOptions info : {:#?}", opts);
-
-    opts.no_progressbar = args.get_flag("no-progressbar");
+    println!("CratesOptions info : {:#?}", opts);
 
     match args.subcommand() {
-        Some(("pull", _args)) => pull(opts)?,
+        Some(("pull", _args)) => {
+            if let Some(source) = domain {
+                config.crates.index_domain = source;
+            }
+            pull(opts)?
+        }
         Some(("download", args)) => {
             opts.upload = args.get_flag("upload");
             opts.init_download = args.get_flag("init");
 
             if let Some(source) = domain {
-                config.domain = source;
+                config.crates.domain = source;
             }
             download(opts)?
         }
         Some(("upload", args)) => {
-            let bucket = args.get_one::<String>("bucket").cloned().unwrap();
-            upload_to_s3(opts, &bucket)?
+            opts.bucket_name = args.get_one::<String>("bucket").cloned().unwrap();
+            upload_to_s3(opts)?
         }
         Some((cmd, _)) => {
             unreachable!("unexpected command {}", cmd)

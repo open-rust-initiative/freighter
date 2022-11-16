@@ -11,16 +11,17 @@ use std::str;
 use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
 
+use crate::cloud::s3::{S3cmd, CloudStorage};
 use crate::config::CratesConfig;
 use crate::crates::index;
-use crate::download::{download_crates_with_log, sync_folder};
+use crate::download::download_crates_with_log;
 use crate::errors::FreightResult;
 
 use super::index::CrateIndex;
 
-/// SyncOptions preserve the sync subcommand config
+/// CratesOptions preserve the sync subcommand config
 #[derive(Clone, Default, Debug)]
-pub struct SyncOptions {
+pub struct CratesOptions {
     pub config: CratesConfig,
 
     pub index: CrateIndex,
@@ -32,14 +33,12 @@ pub struct SyncOptions {
 
     pub upload: bool,
 
-    pub work_dir: PathBuf,
-
     pub crates_path: PathBuf,
 
     pub log_path: PathBuf,
+
+    pub bucket_name: String,
 }
-
-
 
 /// Crate preserve the crates info parse from registry json file
 ///
@@ -88,7 +87,7 @@ pub enum DependencyKind {
 }
 
 /// full download and Incremental download from registry
-pub fn download(opts: &mut SyncOptions) -> FreightResult {
+pub fn download(opts: &mut CratesOptions) -> FreightResult {
     if opts.init_download {
         full_downloads(opts).unwrap();
     } else {
@@ -141,7 +140,7 @@ pub fn download(opts: &mut SyncOptions) -> FreightResult {
 ///   URL_s3_primary: "https://crates-io.s3-us-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
 ///   URL_s3_fallback: "https://crates-io-fallback.s3-eu-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
 /// ```
-pub fn full_downloads(opts: &SyncOptions) -> FreightResult {
+pub fn full_downloads(opts: &CratesOptions) -> FreightResult {
     let pool = ThreadPool::new(opts.config.download_threads);
     let err_record = open_file_with_mutex(&opts.log_path);
 
@@ -159,11 +158,9 @@ pub fn full_downloads(opts: &SyncOptions) -> FreightResult {
     Ok(())
 }
 
-pub fn upload_to_s3(opts: &SyncOptions, bucket_name: &str) -> FreightResult {
-    // let sync_paths = [&opts.crates_path, &opts.rustup_path, &opts.dist_path];
-    // for path in sync_paths {
-    sync_folder(opts.crates_path.to_str().unwrap(), bucket_name).unwrap();
-    // }
+pub fn upload_to_s3(opts: &CratesOptions) -> FreightResult {
+    let s3cmd = S3cmd::default();
+    s3cmd.upload_folder(opts.crates_path.to_str().unwrap(), &opts.bucket_name).unwrap();
     Ok(())
 }
 
@@ -191,7 +188,7 @@ pub fn is_not_hidden(entry: &DirEntry) -> bool {
 
 pub fn parse_index_and_download(
     index_path: PathBuf,
-    opts: &SyncOptions,
+    opts: &CratesOptions,
     pool: &ThreadPool,
     err_record: &Arc<Mutex<File>>,
 ) -> FreightResult {

@@ -18,9 +18,7 @@ use chrono::Utc;
 use sha2::{Digest, Sha256};
 
 use crate::crates::crates::Crate;
-use crate::{
-    errors::{FreightResult, FreighterError},
-};
+use crate::errors::{FreightResult, FreighterError};
 
 // download remote sha file and then download file for hash check
 pub fn download_file_with_sha(
@@ -50,10 +48,7 @@ pub fn download_crates_with_log(
     c: Crate,
     err_record: Arc<Mutex<File>>,
 ) {
-    let url = format!(
-        "{}/{}/{}-{}.crate",
-        url, &c.name, &c.name, &c.vers
-    );
+    let url = format!("{}/{}/{}-{}.crate", url, &c.name, &c.name, &c.vers);
     let folder = path.join(&c.name);
     let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
     match download_file(&url, &file, Some(&c.cksum), false) {
@@ -154,21 +149,6 @@ pub fn upload_file(file: &str, folder: &str, filename: &str) -> FreightResult {
         .arg("--acl-public")
         .status()
         .expect("failed to execute process");
-    if !status.success() {
-        return Err(FreighterError::code(status.code().unwrap()));
-    }
-    Ok(())
-}
-
-pub fn sync_folder(folder: &str, bucket: &str) -> FreightResult {
-    println!("trying to upload folder {} to s3", folder);
-    let status = std::process::Command::new("s3cmd")
-        .arg("sync")
-        .arg(folder)
-        .arg(format!("s3://{}/", bucket))
-        .arg("--acl-public")
-        .status()
-        .expect("failed to execute s3cmd sync");
     if !status.success() {
         return Err(FreighterError::code(status.code().unwrap()));
     }

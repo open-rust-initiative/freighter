@@ -5,6 +5,7 @@ use std::{
 };
 
 use chrono::{Duration, NaiveDate, Utc};
+use log::{info, error};
 use serde::Deserialize;
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
@@ -236,7 +237,7 @@ pub fn sync_channel(opts: &RustUpOptions, channel: &str) -> FreightResult {
             pool.join();
         }
         Err(_err) => {
-            println!("skipping download channel:{}", channel);
+            info!("skipping download channel:{}", channel);
         }
     }
     Ok(())
@@ -245,7 +246,6 @@ pub fn sync_channel(opts: &RustUpOptions, channel: &str) -> FreightResult {
 // parse channel file to get download url and hash
 pub fn parse_channel_file(path: &Path) -> Result<Vec<(String, String)>, FreighterError> {
     let content = fs::read_to_string(path).unwrap();
-    // println!("{}", &content[..64]);
     let channel: Channel = toml::from_str(&content).unwrap();
     let res: Vec<(String, String)> = channel
         .pkg
@@ -287,13 +287,13 @@ pub fn clean_historical_version(dist_path: &PathBuf, channels: (&str, i64)) -> F
                     let file_name = entry.file_name().to_str().unwrap();
                     if file_name.contains(channel) {
                         fs::remove_file(entry.path()).unwrap();
-                        println!("!!![REMOVE] \t\t {:?} !", entry.path());
+                        info!("!!![REMOVE] \t\t {:?} !", entry.path());
                     }
                 });
             // remvoe whole directory when it's empty
             if entry.path().read_dir().unwrap().next().is_none() {
                 fs::remove_dir_all(entry.path()).unwrap();
-                println!("!!![REMOVE] \t\t {:?} !", entry.path());
+                info!("!!![REMOVE] \t\t {:?} !", entry.path());
             }
         });
 
@@ -306,7 +306,7 @@ pub fn compare_date(entry: &DirEntry, sync_days: i64) -> bool {
         {
             Ok(date) => date,
             Err(_) => {
-                println!(
+                error!(
                     "can't parse dir :{} and skipping... ",
                     entry.path().display()
                 );

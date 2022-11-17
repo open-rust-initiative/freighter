@@ -1,5 +1,6 @@
 use chrono::Utc;
 
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
@@ -116,14 +117,14 @@ pub fn download(opts: &mut CratesOptions) -> FreightResult {
             None => panic!("Did you forget to run freighter sync pull before download?"),
         };
         let buffered = BufReader::new(&mut input);
-        println!("crates.io-index modified:");
+        info!("crates.io-index modified:");
         let err_record = open_file_with_mutex(&opts.log_path);
         // get last line of record file
         let mut lines: Vec<String> = buffered.lines().map(|line| line.unwrap()).collect();
         lines.reverse();
         if let Some(line) = lines.first() {
             let vec: Vec<&str> = line.split(',').collect();
-            println!("{:?}", line);
+            info!("{:?}", line);
             index::git2_diff(opts, vec[0], vec[1], err_record).unwrap();
         }
     }
@@ -146,7 +147,7 @@ pub fn full_downloads(opts: &CratesOptions) -> FreightResult {
 
     WalkDir::new(&opts.index.path)
         .into_iter()
-        .filter_entry(|e| is_not_hidden(e))
+        .filter_entry(is_not_hidden)
         .filter_map(|v| v.ok())
         .for_each(|x| {
             if x.file_type().is_file() && x.path().extension().unwrap_or_default() != "json" {
@@ -154,7 +155,7 @@ pub fn full_downloads(opts: &CratesOptions) -> FreightResult {
             }
         });
     pool.join();
-    println!("sync ends with {} task failed", pool.panic_count());
+    info!("sync ends with {} task failed", pool.panic_count());
     Ok(())
 }
 
@@ -214,7 +215,7 @@ pub fn parse_index_and_download(
         }
         Err(err) => match err.kind() {
             ErrorKind::NotFound => {
-                println!(
+                warn!(
                     "This file might have been removed from crates.io:{}",
                     &index_path.display()
                 );

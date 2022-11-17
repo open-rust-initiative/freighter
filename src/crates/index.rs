@@ -21,6 +21,7 @@ use git2::{
     RemoteCallbacks, Repository,
 };
 
+use log::{info, warn};
 use url::Url;
 
 use std::cell::RefCell;
@@ -101,7 +102,7 @@ impl CrateIndex {
         let fetch_commit = do_fetch(&repo, &[CrateIndex::REMOTE_BRANCH], &mut remote, opts)?;
 
         self.generate_commit_record(&opts.log_path, &commit.id(), &fetch_commit.id());
-        println!(
+        info!(
             "commit id:{}, remote id :{}",
             commit.id(),
             &fetch_commit.id()
@@ -113,7 +114,7 @@ impl CrateIndex {
     ///
     ///
     pub fn git_clone(&self, opts: &mut CratesOptions) -> FreightResult {
-        println!("Starting git clone...");
+        info!("Starting git clone...");
         let state = RefCell::new(State {
             progress: None,
             total: 0,
@@ -169,7 +170,7 @@ impl CrateIndex {
         end_commit_id: &Oid,
     ) {
         let now = Utc::now();
-        let mut file_name = now.date().to_string();
+        let mut file_name = now.date_naive().to_string();
         file_name.push('-');
         file_name.push_str("record.cache");
         let file_name = &log_path.join(file_name);
@@ -215,16 +216,15 @@ fn print(state: &mut State) {
 
     if stats.received_objects() == stats.total_objects() {
         if !state.newline {
-            println!();
             state.newline = true;
         }
-        print!(
+        info!(
             "Resolving deltas {}/{}\r",
             stats.indexed_deltas(),
             stats.total_deltas()
         );
     } else {
-        print!(
+        info!(
             "net {:3}% ({:4} kb, {:5}/{:5})  /  idx {:3}% ({:5}/{:5})  \
              /  chk {:3}% ({:4}/{:4}) {}\r",
             network_pct,
@@ -252,7 +252,7 @@ fn print(state: &mut State) {
 pub fn pull(opts: &mut CratesOptions) -> FreightResult {
     let index = opts.index.to_owned();
     if opts.no_progressbar {
-        println!("no-progressbar has been set to true, it will not be displayed!");
+        info!("no-progressbar has been set to true, it will not be displayed!");
     }
     let index_dir = Path::new(index.path.as_path());
     // try to remove index dir if it's empty
@@ -263,7 +263,7 @@ pub fn pull(opts: &mut CratesOptions) -> FreightResult {
             .filter_map(|x| x.ok())
             .any(|e| !e.file_name().to_str().unwrap().contains("git"))
         {
-            println!(
+            warn!(
                 "It seems last task has been broken and {} is empty, 
             freighter had to removed this index, and then run init again",
                 index_dir.display()
@@ -368,13 +368,13 @@ fn do_fetch<'a>(
     // Print out our transfer progress.
     cb.transfer_progress(|stats| {
         if stats.received_objects() == stats.total_objects() {
-            print!(
+            info!(
                 "Resolving deltas {}/{}\r",
                 stats.indexed_deltas(),
                 stats.total_deltas()
             );
         } else if stats.total_objects() > 0 {
-            print!(
+            info!(
                 "Received {}/{} objects ({}) in {} bytes\r",
                 stats.received_objects(),
                 stats.total_objects(),
@@ -395,14 +395,14 @@ fn do_fetch<'a>(
     // Always fetch all tags.
     // Perform a download and also update tips
     fo.download_tags(git2::AutotagOption::All);
-    println!("Fetching {} for repo", remote.name().unwrap());
+    info!("Fetching {} for repo", remote.name().unwrap());
     remote.fetch(refs, Some(&mut fo), None)?;
 
     // If there are local objects (we got a thin pack), then tell the user
     // how many objects we saved from having to cross the network.
     let stats = remote.stats();
     if stats.local_objects() > 0 {
-        println!(
+        info!(
             "\rReceived {}/{} objects in {} bytes (used {} local \
              objects)",
             stats.indexed_objects(),
@@ -411,7 +411,7 @@ fn do_fetch<'a>(
             stats.local_objects()
         );
     } else {
-        println!(
+        info!(
             "\rReceived {}/{} objects in {} bytes",
             stats.indexed_objects(),
             stats.total_objects(),
@@ -434,7 +434,7 @@ fn fast_forward(
         None => String::from_utf8_lossy(lb.name_bytes()).to_string(),
     };
     let msg = format!("Fast-Forward: Setting {} to id: {}", name, rc.id());
-    println!("{}", msg);
+    info!("{}", msg);
     lb.set_target(rc.id(), &msg)?;
     repo.set_head(&name)?;
     repo.checkout_head(Some(
@@ -461,7 +461,7 @@ fn normal_merge(
     let mut idx = repo.merge_trees(&ancestor, &local_tree, &remote_tree, None)?;
 
     if idx.has_conflicts() {
-        println!("Merge conflicts detected...");
+        info!("Merge conflicts detected...");
         repo.checkout_index(Some(&mut idx), None)?;
         return Ok(());
     }
@@ -496,7 +496,7 @@ fn do_merge<'a>(
 
     // 2. Do the appropriate merge
     if analysis.0.is_fast_forward() {
-        println!("Doing a fast forward");
+        info!("Doing a fast forward");
         // do a fast forward
         let ref_name = format!("refs/heads/{}", remote_branch);
         match repo.find_reference(&ref_name) {
@@ -527,7 +527,7 @@ fn do_merge<'a>(
         let head_commit = repo.reference_to_annotated_commit(&repo.head()?)?;
         normal_merge(repo, &head_commit, &fetch_commit)?;
     } else {
-        println!("Nothing to do...");
+        info!("Nothing to do...");
     }
 
     Ok(())

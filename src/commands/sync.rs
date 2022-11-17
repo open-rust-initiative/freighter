@@ -25,6 +25,7 @@
 //!
 
 use clap::{arg, ArgMatches};
+use log::{info};
 
 use crate::config::Config;
 use crate::crates::command_prelude::*;
@@ -101,10 +102,10 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
 
     match args.get_one::<usize>("download-threads").cloned() {
         Some(download_threads) => opts.config.download_threads = download_threads,
-        None => println!("use default thread count: {}", opts.config.download_threads),
+        None => info!("use default thread count: {}", opts.config.download_threads),
     };
 
-    println!("CratesOptions info : {:#?}", opts);
+    info!("CratesOptions info : {:#?}", opts);
 
     match args.subcommand() {
         Some(("pull", _args)) => {

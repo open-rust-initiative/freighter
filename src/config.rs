@@ -9,7 +9,6 @@ use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
 };
-
 use serde::{Deserialize, Serialize};
 
 /// 
@@ -18,6 +17,14 @@ pub struct Config {
     pub work_dir: Option<PathBuf>,
     pub crates: CratesConfig,
     pub rustup: RustUpConfig,
+    pub log: LogConfig,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct LogConfig {
+    pub encoder: String,
+    pub level: String,
+    pub size: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -44,6 +51,7 @@ impl Config {
             work_dir: None,
             rustup: RustUpConfig::default(),
             crates: CratesConfig::default(),
+            log: LogConfig::default(),
         }
     }
 

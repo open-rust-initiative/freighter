@@ -15,6 +15,7 @@
 //!
 
 use clap::{arg, ArgMatches};
+use log::info;
 
 use crate::config::Config;
 use crate::crates::command_prelude::*;
@@ -93,10 +94,10 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         opts.config.download_threads = download_threads;
     };
 
-    println!("RustUpOptions info : {:#?}", opts);
+    info!("RustUpOptions info : {:#?}", opts);
 
     match args.subcommand() {
-        Some(("download", args)) => sync_rustup(&mut RustUpOptions {
+        Some(("download", args)) => sync_rustup(&RustUpOptions {
             clean: args.get_flag("clean"),
             version: args.get_one::<String>("version").cloned(),
             ..opts

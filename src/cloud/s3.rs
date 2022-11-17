@@ -1,3 +1,5 @@
+use log::info;
+
 use crate::errors::{FreightResult, FreighterError};
 
 /// provide a common file upload interface
@@ -14,7 +16,7 @@ pub struct S3cmd {}
 
 impl CloudStorage for S3cmd {
     fn upload_folder(&self, folder: &str, bucket: &str) -> FreightResult {
-        println!("trying to upload folder {} to s3", folder);
+        info!("trying to upload folder {} to s3", folder);
         let status = std::process::Command::new("s3cmd")
             .arg("sync")
             .arg(folder)

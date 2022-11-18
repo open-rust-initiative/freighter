@@ -37,25 +37,37 @@ docker run -it -d -v /mnt/volume_fra1_02/:/freighter  --name freighter registry.
 ```
 
 ##### 3. Start downlaod files and upload to s3.
-There are several commands you can run to sync data with freighter, for example if you want to sync crates,you should first run __freighter sync pull__ and then __freighter sync download__
+There are several commands you can run to sync index and rustup toolchains with freighter, 
+__freighter crates pull__ will start clone a git index from upstream to local, which preserves all the crates information.
+__freighter crates download__ will download the crates files parsed from git index you pulled. If you're first running freighter, you need to add a flag __--init__ after download command for init download all the files, otherwise it will only download incremental file by last __pull command__.It may take some times if you use init flag , but you can use __-c augumment__ to use more threads or change the default value in __config.toml__ to speed up download. 
+
+Crates File initlization:
 
 ```bash
-docker exec freighter bash -c 'freighter sync pull && freighter sync download'
+docker exec freighter bash -c 'freighter crates pull && freighter crates download --init'
 ```
 
-if you want to sync rustup mirrors, just run 
+It is better to upldate the index and download file frequently for incremental updates by combine using these commands:
+
 ```bash
-docker exec freighter bash -c 'freighter sync rustup'
+docker exec freighter bash -c 'freighter crates pull && freighter crates download'
 ```
 
-After download all the files by using __freighter sync download__ and __freighter sync rustup__, you can run upload command to upstream all your local files to s3, for example:
+After download crates file, you can also sync rustup mirrors if that meets your requirements:
+
+```bash
+docker exec freighter bash -c 'freighter rustup download'
+```
+
+After download all the files by using __freighter crates download__ and __freighter rustup download__, you can run upload command to upstream all your local files to s3, for example:
 
 ```bash
 // create your own bucket in s3
 s3cmd mb s3://your-own-bucket
 
 //start uplaod to your own bucket
-freighter sync upload --bucket your-own-bucket
+freighter crates upload --bucket your-own-bucket
+freighter rustup upload --bucket your-own-bucket
 ```
 Tips: we use s3cmd to upload files, so you may need to complete your own configuration before using [s3cmd](https://github.com/s3tools/s3cmd)
 
@@ -63,23 +75,23 @@ Tips: we use s3cmd to upload files, so you may need to complete your own configu
 ```bash
 $ crontab -e
 $ # Add the following line to the crontab file
-$ */5 * * * * docker exec freighter bash -c 'freighter sync pull && freighter sync download'
-$ 0 2 * * *  docker exec freighter bash -c 'freighter sync rustup'
+$ */5 * * * * docker exec freighter bash -c 'freighter crates pull && freighter crates download'
+$ 0 2 * * *  docker exec freighter bash -c 'freighter rustup download'
 ```
 
 #### Directly Usage
 
-##### 1. Sync the crates index with specify directory
+##### 1. Download the crates index with specify directory
 ```bash
-$ freighter sync -c /mnt/volume_fra1_01 pull
+$ freighter crates -c /mnt/volume_fra1_01 pull
 ```
 ##### 2. Download all crates file to local disk and then uoload to s3(you need to config s3cmd tools):
 ```bash
-freighter sync download --init --upload
+freighter crates download --init --upload
 ```
 ##### 3. Download crates file with multi-thread to specify directory:
 ```bash
-freighter sync -t 128 -c /mnt/volume_fra1_01 download --init
+freighter crates -t 128 -c /mnt/volume_fra1_01 download --init
 ```
 
 ### How to contribute?

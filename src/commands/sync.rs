@@ -2,11 +2,25 @@
 //! function implemented in the `src/crates/index`.
 //!
 //! **crates** subcommand provide major functions include:
-//! - sync crates index from upstream to local
-//!     - The crates index is a git repository, and **cargo** clone and update from [GitHub](https://github.com/rust-lang/crates.io-index).
-//!         - The clone use `bare` mode, more details in the [cargo guide](https://github.com/rust-lang/cargo/blob/6b6b0b486d73c03ed952591d880debec1d47c534/src/doc/src/guide/cargo-home.md#directories)
-//! - sync crate file from upstream to local
-//!    - The crate file of upstream location detail from [crates.io-index](https://github.com/rust-lang/crates.io-index/blob/master/.github/workflows/update-dl-url.yml)
+//!
+//!   Arguments:
+//!   - __domain__: you can choose your own upstream by adding this arugment in command,
+//!         this param can be changed in the configuration file or pass it here
+//!   - __download-threads__: specify the download threads to parallel download,
+//!         this param can be changed in the configuration file or pass it here
+//!   - __no-progressbar__: Whether to hide progress bar when start downloading
+//!
+//! # pull subcommand
+//! 
+//!   sync crates index from upstream to local:
+//! 
+//!   - The crates index is a git repository, and **cargo** clone and update from [GitHub](https://github.com/rust-lang/crates.io-index).
+//!     - The clone use `bare` mode, more details in the [cargo guide](https://github.com/rust-lang/cargo/blob/6b6b0b486d73c03ed952591d880debec1d47c534/src/doc/src/guide/cargo-home.md#directories)
+//!   
+//! # download subcommand
+//!   sync crate file from upstream to local:
+//!     
+//!   - The crate file of upstream location detail from [crates.io-index](https://github.com/rust-lang/crates.io-index/blob/master/.github/workflows/update-dl-url.yml)
 //!      ```YAML
 //!      env:
 //!         URL_api: "https://crates.io/api/v1/crates"
@@ -14,7 +28,14 @@
 //!         URL_s3_primary: "https://crates-io.s3-us-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
 //!         URL_s3_fallback: "https://crates-io-fallback.s3-eu-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
 //!      ```
-//! - sync crate file to Object Storage Service compatible with [AWS S3](https://aws.amazon.com/s3/)
+//! 
+//!   Arguments:
+//!   - __init__: Whether to download all the crates files for initialization.
+//!   - __upload__: Whether to upload single file to s3 after download success.
+//!
+//! # upload subcommand
+//!
+//!   - Sync crate file to Object Storage Service compatible with [AWS S3](https://aws.amazon.com/s3/)
 //!     - Digitalocean Spaces
 //!     - Huawei Cloud OBS
 //!     - Alibaba Cloud OSS
@@ -22,14 +43,16 @@
 //!     - AWS S3
 //!     - minio
 //!     - Ceph
-//!
+//!   Arguments:
+//!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param befor uplaod.
+//!  
 
 use clap::{arg, ArgMatches};
-use log::{info};
+use log::info;
 
+use crate::commands::command_prelude::*;
 use crate::config::Config;
-use crate::crates::command_prelude::*;
-use crate::crates::crates::{download, upload_to_s3, CratesOptions};
+use crate::crates::crates_file::{download, upload_to_s3, CratesOptions};
 use crate::crates::index::{pull, CrateIndex};
 use crate::errors::FreightResult;
 

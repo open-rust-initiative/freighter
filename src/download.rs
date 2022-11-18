@@ -18,7 +18,7 @@ use chrono::Utc;
 use log::{error, info, warn};
 use sha2::{Digest, Sha256};
 
-use crate::crates::crates::Crate;
+use crate::crates::crates_file::Crate;
 use crate::errors::{FreightResult, FreighterError};
 
 // download remote sha file and then download file for hash check

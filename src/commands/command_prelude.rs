@@ -1,3 +1,4 @@
+//! provide common utils for add a flag to clap
 use clap::Command;
 pub use clap::{value_parser, Arg, ArgAction, ArgMatches};
 

@@ -1,8 +1,17 @@
+//! parse config from config.toml and read work-dir argument if provided.
 //!
-//!
-//!
-//!
-//!
+//! 
+//!   Arguments:
+//!   - __work-dir__(optional): specify the work dir, where to downlaod crates, rust toolchains and storage logs, default: $HOME/.freighter
+//!   
+//!   example:
+//! 
+//!   ```bash  
+//!   freighter --work-dir /mnt/data/
+//!   or
+//!   freighter -c /mnt/data/
+//!   ```
+//! 
 
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -80,7 +89,7 @@ USAGE:
     {usage}
 
 Some common freight commands are (see all commands with --list):
-    sync    Sync the index and crate files from the upstream to local, cloud or registry
+    crates    Sync the index and crate files from the upstream to local, cloud or registry
 
 See 'freight help <command>' for more information on a specific command.\n"
         )

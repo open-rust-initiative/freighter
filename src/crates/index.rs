@@ -35,7 +35,7 @@ use threadpool::ThreadPool;
 
 use crate::errors::FreightResult;
 
-use super::crates::{parse_index_and_download, CratesOptions};
+use super::crates_file::{parse_index_and_download, CratesOptions};
 
 /// `CrateIndex` is a wrapper `Git Repository` that crates-io index.
 ///
@@ -538,7 +538,7 @@ fn do_merge<'a>(
 mod tests {
     use std::path::PathBuf;
 
-    use crate::crates::crates::CratesOptions;
+    use crate::crates::crates_file::CratesOptions;
 
     #[test]
     fn test_clone() {

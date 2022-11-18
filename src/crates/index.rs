@@ -162,7 +162,7 @@ impl CrateIndex {
         Ok(())
     }
 
-    /// save commit record in record.cache, it will write from first commit to current commit if command is git clone
+    /// save commit record in record.log, it will write from first commit to current commit if command is git clone
     pub fn generate_commit_record(
         &self,
         log_path: &PathBuf,
@@ -172,7 +172,7 @@ impl CrateIndex {
         let now = Utc::now();
         let mut file_name = now.date_naive().to_string();
         file_name.push('-');
-        file_name.push_str("record.cache");
+        file_name.push_str("record.log");
         let file_name = &log_path.join(file_name);
         let mut f = match OpenOptions::new().write(true).append(true).open(file_name) {
             Ok(f) => f,
@@ -216,15 +216,16 @@ fn print(state: &mut State) {
 
     if stats.received_objects() == stats.total_objects() {
         if !state.newline {
+            print!("");
             state.newline = true;
         }
-        info!(
+        print!(
             "Resolving deltas {}/{}\r",
             stats.indexed_deltas(),
             stats.total_deltas()
         );
     } else {
-        info!(
+        print!(
             "net {:3}% ({:4} kb, {:5}/{:5})  /  idx {:3}% ({:5}/{:5})  \
              /  chk {:3}% ({:4}/{:4}) {}\r",
             network_pct,
@@ -346,7 +347,7 @@ fn handle_diff_line(
 
 /// ### References Codes
 ///
-/// - [git2-rs](https://github.com/rust-lang/git2-rs)'s clone (example)[https://github.com/rust-lang/git2-rs/blob/master/examples/diff.rs].
+/// - [git2-rs](https://github.com/rust-lang/git2-rs)'s clone (example)[<https://github.com/rust-lang/git2-rs/blob/master/examples/diff.rs>].
 fn tree_to_treeish<'a>(
     repo: &'a Repository,
     arg: &str,
@@ -368,13 +369,13 @@ fn do_fetch<'a>(
     // Print out our transfer progress.
     cb.transfer_progress(|stats| {
         if stats.received_objects() == stats.total_objects() {
-            info!(
+            print!(
                 "Resolving deltas {}/{}\r",
                 stats.indexed_deltas(),
                 stats.total_deltas()
             );
         } else if stats.total_objects() > 0 {
-            info!(
+            print!(
                 "Received {}/{} objects ({}) in {} bytes\r",
                 stats.received_objects(),
                 stats.total_objects(),
@@ -402,7 +403,7 @@ fn do_fetch<'a>(
     // how many objects we saved from having to cross the network.
     let stats = remote.stats();
     if stats.local_objects() > 0 {
-        info!(
+        print!(
             "\rReceived {}/{} objects in {} bytes (used {} local \
              objects)",
             stats.indexed_objects(),
@@ -411,7 +412,7 @@ fn do_fetch<'a>(
             stats.local_objects()
         );
     } else {
-        info!(
+        print!(
             "\rReceived {}/{} objects in {} bytes",
             stats.indexed_objects(),
             stats.total_objects(),

@@ -1,7 +1,7 @@
-//! **sync** subcommand focus on the sync crates index and crate files from upstream. The core
+//! **crates** subcommand focus on the sync crates index and crate files from upstream. The core
 //! function implemented in the `src/crates/index`.
 //!
-//! **sync** subcommand provide major functions include:
+//! **crates** subcommand provide major functions include:
 //! - sync crates index from upstream to local
 //!     - The crates index is a git repository, and **cargo** clone and update from [GitHub](https://github.com/rust-lang/crates.io-index).
 //!         - The clone use `bare` mode, more details in the [cargo guide](https://github.com/rust-lang/cargo/blob/6b6b0b486d73c03ed952591d880debec1d47c534/src/doc/src/guide/cargo-home.md#directories)
@@ -33,23 +33,25 @@ use crate::crates::crates::{download, upload_to_s3, CratesOptions};
 use crate::crates::index::{pull, CrateIndex};
 use crate::errors::FreightResult;
 
-/// The __sync__ subcommand
+/// The __crates__ subcommand
 ///
 
 pub fn cli() -> clap::Command {
     clap::Command::new("crates")
         .arg(flag("no-progressbar", "Hide progressbar when start sync"))
-        .arg(arg!(-t --"download-threads" <VALUE> "specify the download thread count,default will be 16")
+        .arg(arg!(-t --"download-threads" <VALUE> "specify the download threads to parallel download, 
+        this param can be changed in the configuration file or pass it here")
             .value_parser(value_parser!(usize))
         )
-        .arg(arg!(-d --"domain" <VALUE> "specify the source you want to sync from"))
+        .arg(arg!(-d --"domain" <VALUE> "specify the source you want to sync from, 
+        this param can be changed in the configuration file or pass it here"))
         .subcommand(subcommand("pull"))
         .subcommand(subcommand("upload")
         .arg(arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files").required(true)
         ))
         .subcommand(subcommand("download")
             .arg(flag("init", "Start init download of crates file, this will traverse all index for full download"))
-            .arg(flag("upload", "upload file after download"))
+            .arg(flag("upload", "upload every crate file after download"))
         )
         .subcommand_required(true)
         .arg_required_else_help(true)

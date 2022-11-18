@@ -10,7 +10,10 @@ use std::str::FromStr;
 use clap::{arg, ArgMatches};
 use log::LevelFilter;
 use log4rs::append::console::ConsoleAppender;
-use log4rs::append::file::FileAppender;
+use log4rs::append::rolling_file::policy::compound::roll::delete::DeleteRoller;
+use log4rs::append::rolling_file::policy::compound::trigger::size::SizeTrigger;
+use log4rs::append::rolling_file::policy::compound::CompoundPolicy;
+use log4rs::append::rolling_file::RollingFileAppender;
 use log4rs::config::runtime::Config as Log4rsConfig;
 use log4rs::config::Logger;
 use log4rs::config::{Appender, Root};
@@ -93,23 +96,27 @@ pub fn execute_subcommand(config: &mut Config, cmd: &str, args: &ArgMatches) -> 
         Err(FreighterError::unknown_command(cmd.to_string()))
     }
 }
-
+/// read values(log format encoder, log limit and level) from config file
+/// and then initialize config for log4rs, log will preserve in /work_dir/log by default
 pub fn init_log(config: &LogConfig, work_dir: PathBuf) -> FreightResult {
     let binding = work_dir.join("freighter/log/info.log");
     let log_path = binding.to_str().unwrap();
     let level = LevelFilter::from_str(&config.level).unwrap();
 
-
-    let encoder = PatternEncoder::new("{d}:{l} - {m}{n}");
+    let encoder = PatternEncoder::new(&config.encoder);
 
     let stdout = ConsoleAppender::builder()
         .encoder(Box::new(encoder.clone()))
         .build();
 
-    // let policy = Policy::builder().build();
-    let file = FileAppender::builder()
+    let policy = CompoundPolicy::new(
+        Box::new(SizeTrigger::new(config.limit * 1024 * 1024)),
+        Box::new(DeleteRoller::default()),
+    );
+
+    let file = RollingFileAppender::builder()
         .encoder(Box::new(encoder))
-        .build(log_path)
+        .build(log_path, Box::new(policy))
         .unwrap();
 
     let log4rs_config = Log4rsConfig::builder()

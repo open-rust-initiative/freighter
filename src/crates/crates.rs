@@ -98,7 +98,7 @@ pub fn download(opts: &mut CratesOptions) -> FreightResult {
                 e.file_name()
                     .to_str()
                     .unwrap()
-                    .contains(&Utc::now().date().to_string())
+                    .contains(&Utc::now().date_naive().to_string())
                     || e.file_type().is_dir()
             })
             .filter_map(|v| v.ok());
@@ -132,7 +132,7 @@ pub fn download(opts: &mut CratesOptions) -> FreightResult {
     Ok(())
 }
 
-/// https://github.com/rust-lang/crates.io-index/blob/master/.github/workflows/update-dl-url.yml
+/// <https://github.com/rust-lang/crates.io-index/blob/master/.github/workflows/update-dl-url.yml>
 ///
 /// ```YAML
 ///env:
@@ -167,7 +167,7 @@ pub fn upload_to_s3(opts: &CratesOptions) -> FreightResult {
 
 /// open error record file with Mutex
 pub fn open_file_with_mutex(log_path: &Path) -> Arc<Mutex<File>> {
-    let file_name = log_path.join("error-crates.cache");
+    let file_name = log_path.join("error-crates.log");
     let err_record = match OpenOptions::new().write(true).append(true).open(&file_name) {
         Ok(f) => Arc::new(Mutex::new(f)),
         Err(err) => match err.kind() {

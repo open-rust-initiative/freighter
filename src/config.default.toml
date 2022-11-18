@@ -8,10 +8,8 @@ encoder = "{d}:{l} - {m}{n}"
 # log level
 level = "info"
 
-# will delete and regenerate log file if exceeded the size
-size = "10mb"
-
-  
+# will delete and regenerate log file if exceeded the limit, unit is MB
+limit = 10
 
 
 [crates]

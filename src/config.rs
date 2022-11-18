@@ -24,7 +24,7 @@ pub struct Config {
 pub struct LogConfig {
     pub encoder: String,
     pub level: String,
-    pub size: String,
+    pub limit: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]

@@ -1,3 +1,34 @@
+
+
+[log]
+# log format encoder, see https://docs.rs/log4rs/1.2.0/log4rs/append/file/struct.FileAppenderDeserializer.html#configuration
+# for more information
+encoder = "{d}:{l} - {m}{n}"
+
+# log level
+level = "info"
+
+# will delete and regenerate log file if exceeded the limit, unit is MB
+limit = 10
+
+
+[crates]
+# download index from domain
+index_domain = "https://github.com/rust-lang/crates.io-index.git"
+
+# download crates from domain
+domain = "https://static.crates.io/crates"
+
+# Number of download threads
+download_threads = 2
+
+[rustup]
+# download rustup from domain
+domain = "https://static.rust-lang.org"
+
+# Number of download threads
+download_threads = 8
+
 # stable version that you want to keep forever
 sync_stable_versions = [
     "1.0",
@@ -97,8 +128,5 @@ sync_nightly_days = 30
 # days you want to keep for historical beta version
 sync_beta_days = 30
 
-# download crates from domain
-crates_domain = "https://static.crates.io/crates"
 
-# download rustup from domain
-rustup_domain = "https://static.rust-lang.org"
+

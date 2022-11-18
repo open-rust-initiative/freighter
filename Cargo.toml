@@ -31,6 +31,8 @@ sea-orm = { version = "0.10.2", features = [ "sqlx-mysql", "runtime-tokio-rustls
 threadpool = "1.8.1"
 dirs = "4.0.0"
 toml = "0.5.8"
+log4rs = {version = "1.2.0", features = ["toml_format"] }
+log = "0.4.17"
 
 
 [dev-dependencies]

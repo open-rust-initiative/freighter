@@ -90,6 +90,7 @@ USAGE:
 
 Some common freight commands are (see all commands with --list):
     crates    Sync the index and crate files from the upstream to local, cloud or registry
+    rustup    Sync the rustup and toolchain files from the upstream to local, cloud or registry
 
 See 'freight help <command>' for more information on a specific command.\n"
         )

@@ -57,6 +57,8 @@ After download crates file, you can also sync rustup mirrors if that meets your 
 
 ```bash
 docker exec freighter bash -c 'freighter rustup download'
+and 
+docker exec freighter bash -c 'freighter channel download'
 ```
 
 After download all the files by using __freighter crates download__ and __freighter rustup download__, you can run upload command to upstream all your local files to s3, for example:
@@ -83,7 +85,7 @@ $ 0 2 * * *  docker exec freighter bash -c 'freighter rustup download'
 
 ##### 1. Download the crates index with specify directory
 ```bash
-$ freighter crates -c /mnt/volume_fra1_01 pull
+$ freighter -c /mnt/volume_fra1_01 crates pull
 ```
 ##### 2. Download all crates file to local disk and then uoload to s3(you need to config s3cmd tools):
 ```bash
@@ -91,8 +93,19 @@ freighter crates download --init --upload
 ```
 ##### 3. Download crates file with multi-thread to specify directory:
 ```bash
-freighter crates -t 128 -c /mnt/volume_fra1_01 download --init
+freighter -c /mnt/volume_fra1_01 crates -t 128 download --init
 ```
+
+##### 4. Download rustup init file:
+```bash
+freighter -c /mnt/volume_fra1_01 rustup -t 128 download
+```
+
+##### 5. Download rust toolchain files:
+```bash
+freighter -c /mnt/volume_fra1_01 channel -t 128 download
+```
+
 
 ### How to contribute?
 

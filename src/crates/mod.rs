@@ -8,3 +8,4 @@
 pub mod index;
 pub mod crates_file;
 pub mod rustup;
+pub mod channel;

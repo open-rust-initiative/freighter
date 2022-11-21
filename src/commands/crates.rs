@@ -24,7 +24,7 @@
 //!      ```YAML
 //!      env:
 //!         URL_api: "https://crates.io/api/v1/crates"
-//!         URL_cdn: "https://static.crates.io/crates/{crate}/{crate}-{version}.crate"
+//!         URL_cdn: "https://static.crates.io/crates/sync{crate}/{crate}-{version}.crate"
 //!         URL_s3_primary: "https://crates-io.s3-us-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
 //!         URL_s3_fallback: "https://crates-io-fallback.s3-eu-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
 //!      ```
@@ -93,15 +93,15 @@ OPTIONS:
 EXAMPLES
 1. Sync the crates index with specify directory
 
-       freighter sync -c /mnt/volume_fra1_01 pull
+       freighter -c /mnt/volume_fra1_01 crates pull
 
 2. Download all crates file and uoload:
 
-       freighter sync download --init --upload
+       freighter crates download --init --upload
 
 3. Download crates file with multi-thread to specify directory:
 
-       freighter sync -t 512 -c /mnt/volume_fra1_01 download --init
+       freighter -c /mnt/volume_fra1_01 crates -t 512 download --init
 
 \n")
 }

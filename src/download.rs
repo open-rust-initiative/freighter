@@ -25,7 +25,7 @@ use crate::errors::{FreightResult, FreighterError};
 pub fn download_file_with_sha(url: &str, file_folder: &Path, file_name: &str) -> FreightResult {
     let sha_url = format!("{}{}", url, ".sha256");
     let sha_name = format!("{}{}", file_name, ".sha256");
-    let sha_path = file_folder.join(&sha_name);
+    let sha_path = file_folder.join(sha_name);
     //always update sha256 file
     let res = download_file(&sha_url, &sha_path, None, true).unwrap();
     if res {

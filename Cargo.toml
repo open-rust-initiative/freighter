@@ -14,7 +14,7 @@ description = """
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.63"
+anyhow = "1.0.66"
 thiserror = "1.0.36"
 clap = "4.0.26"
 git2 = "0.15.0"

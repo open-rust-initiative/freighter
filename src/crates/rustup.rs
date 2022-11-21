@@ -2,11 +2,7 @@ use std::{
     path::{PathBuf},
 };
 
-use chrono::{Duration, NaiveDate, Utc};
-use log::{error, info};
-
 use threadpool::ThreadPool;
-use walkdir::WalkDir;
 
 use crate::{
     config::RustUpConfig,

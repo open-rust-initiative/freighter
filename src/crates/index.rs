@@ -87,11 +87,6 @@ impl CrateIndex {
         }
     }
 
-    /// Get the `path` of this `CrateIndex`.
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
     /// Check the destination path is a git repository and pull
     pub fn git_pull(&self, opts: &CratesOptions) -> FreightResult {
         let repo = get_repo(self.path.clone());

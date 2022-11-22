@@ -5,15 +5,7 @@
 /// - [git2-rs](https://github.com/rust-lang/git2-rs)'s clone (example)[https://github.com/rust-lang/git2-rs/blob/master/examples/clone.rs].
 /// - [crates.io](https://github.com/rust-lang/crates.io)'s [structs](https://github.com/rust-lang/crates.io/blob/master/cargo-registry-index/lib.rs)
 ///
-/// TODO
-/// - [ ] 1. Link the `CrateIndex` with `sync` subcommand
-/// - [ ] 2. Add https://github.com/rust-lang/crates.io-index.git as default url value
-/// - [ ] 3. Add check the destination path is empty
-/// - [ ] 4. Add check the destination path is a git repository
-/// - [ ] 5. Add check the destination path is a crates-io index
-/// - [ ] 6. If the destination path is a git repository and is a crate-io index, run pull instead of clone
-/// - [ ] 7. Add a flag for `enable` or `disable` the progress bar
-/// - [ ] 8. Change the test index git repo with local git repository for test performance
+
 use chrono::Utc;
 use git2::build::{CheckoutBuilder, RepoBuilder};
 use git2::{

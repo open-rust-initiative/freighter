@@ -14,6 +14,7 @@ pub mod crates;
 pub mod rustup;
 pub mod channel;
 pub mod command_prelude;
+pub mod server;
 
 /// The builtin function is the entry point of commands mod. Each subcommand is a
 /// `clap::Command<'static>` type, and the `exec` function is logic entry.
@@ -28,6 +29,7 @@ pub fn builtin() -> Vec<App> {
         crates::cli(),
         rustup::cli(),
         channel::cli(),
+        server::cli(),
     ]
 }
 
@@ -39,6 +41,7 @@ pub fn builtin_exec(cmd: &str) -> Option<fn(&mut Config, &ArgMatches) -> Freight
         "crates" => crates::exec,
         "rustup" => rustup::exec,
         "channel" => channel::exec,
+        "server" => server::exec,
         _ => return None,
     };
 

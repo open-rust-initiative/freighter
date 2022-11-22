@@ -12,6 +12,7 @@ mod commands;
 mod crates;
 mod cloud;
 mod download;
+mod server;
 
 ///
 /// Main entry point for the [Freighter](https://github.com/open-rust-initiative/freighter) application.

@@ -11,7 +11,7 @@ use std::{
 };
 use serde::{Deserialize, Serialize};
 
-/// 
+/// parse config from file
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub work_dir: Option<PathBuf>,
@@ -34,7 +34,7 @@ pub struct CratesConfig {
     pub download_threads: usize,
 }
 
-/// config for rustup mirror sync 
+/// config for rustup mirror sync
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct RustUpConfig {
     pub domain: String,
@@ -59,9 +59,11 @@ impl Config {
         home_path.join("freighter/config.toml")
     }
 
-    pub fn load(&self, path: &Path) -> Config {
-        let path = Self::format_path(path);
-        Self::get_config(&path)
+    pub fn load(&self, root: &Path) -> Config {
+        let path = Self::format_path(root);
+        let mut config = Self::get_config(&path);
+        config.work_dir = Some(root.join("freighter"));
+        config
     }
 
     // read channel list from config file, if config file don't exist then it will be created from default file
@@ -84,7 +86,8 @@ impl Config {
         match toml::from_str(&content) {
             Ok(config) => config,
             Err(err) => panic!("Config file doesn't match, maybe it's outdated or you have provided a invalid value, 
-            you can manaully delete it and try again. Caused by {}", err),
+            you can manaully delete it and try again.
+            Caused by {}", err),
         }
     }
 }

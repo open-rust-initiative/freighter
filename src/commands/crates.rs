@@ -119,8 +119,8 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         config: config.crates.to_owned(),
         index: CrateIndex::new(&config.crates.index_domain, work_dir.to_owned()),
         no_progressbar: args.get_flag("no-progressbar"),
-        crates_path: work_dir.join("freighter/crates"),
-        log_path: work_dir.join("freighter/log"),
+        crates_path: work_dir.join("crates"),
+        log_path: work_dir.join("log"),
         ..Default::default()
     };
     let domain = args.get_one::<String>("domain").cloned();

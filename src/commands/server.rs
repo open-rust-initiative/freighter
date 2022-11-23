@@ -34,8 +34,7 @@ pub fn cli() -> clap::Command {
     clap::Command::new("server")
         .arg(arg!(-i --"ip" <VALUE> "specify the ip address").value_parser(value_parser!(IpAddr)))
         .arg(
-            arg!(-p --"port" <VALUE> "specify the listening port")
-                .value_parser(value_parser!(u16)),
+            arg!(-p --"port" <VALUE> "specify the listening port").value_parser(value_parser!(u16)),
         )
         .arg(
             arg!(-d --"directory" <VALUE> "specify the file directory")
@@ -67,8 +66,7 @@ EXAMPLES
 ///
 ///
 ///
-#[tokio::main]
-pub async fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
+pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
     let work_dir = config
         .work_dir
         .as_ref()
@@ -78,6 +76,6 @@ pub async fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
     let port: Option<u16> = args.get_one::<u16>("port").cloned();
 
     let socket_addr = parse_ipaddr(listen, port);
-    file_server::start(work_dir.to_owned(), socket_addr).await;
+    file_server::start(work_dir.to_owned(), socket_addr);
     Ok(())
 }

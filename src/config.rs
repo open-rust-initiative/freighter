@@ -55,13 +55,13 @@ impl Config {
         }
     }
 
-    pub fn format_path(home_path: &Path) -> PathBuf {
-        home_path.join("freighter/config.toml")
+    pub fn format_path(root: &Path) -> PathBuf {
+        root.join("freighter/config.toml")
     }
 
     pub fn load(&self, root: &Path) -> Config {
-        let path = Self::format_path(root);
-        let mut config = Self::get_config(&path);
+        let config_path = Self::format_path(root);
+        let mut config = Self::get_config(&config_path);
         config.work_dir = Some(root.join("freighter"));
         config
     }

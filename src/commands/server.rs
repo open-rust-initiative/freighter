@@ -67,15 +67,11 @@ EXAMPLES
 ///
 ///
 pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
-    let work_dir = config
-        .work_dir
-        .as_ref()
-        .expect("something bad happened because work_dir is none");
 
     let listen: Option<IpAddr> = args.get_one::<IpAddr>("ip").cloned();
     let port: Option<u16> = args.get_one::<u16>("port").cloned();
 
     let socket_addr = parse_ipaddr(listen, port);
-    file_server::start(work_dir.to_owned(), socket_addr);
+    file_server::start(config, socket_addr);
     Ok(())
 }

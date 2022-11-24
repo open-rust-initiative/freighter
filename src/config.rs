@@ -32,6 +32,8 @@ pub struct CratesConfig {
     pub index_domain: String,
     pub domain: String,
     pub download_threads: usize,
+    pub redirect_domain: Option<String>,
+    pub backup_domain: Option<Vec<String>>,
 }
 
 /// config for rustup mirror sync
@@ -42,6 +44,7 @@ pub struct RustUpConfig {
     pub sync_stable_versions: Vec<String>,
     pub sync_nightly_days: i64,
     pub sync_beta_days: i64,
+
 }
 
 ///

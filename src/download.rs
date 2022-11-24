@@ -17,6 +17,7 @@ use std::{
 use chrono::Utc;
 use log::{error, info, warn};
 use sha2::{Digest, Sha256};
+use warp::hyper::Uri;
 
 use crate::crates::crates_file::Crate;
 use crate::errors::{FreightResult, FreighterError};
@@ -34,6 +35,13 @@ pub fn download_file_with_sha(url: &str, file_folder: &Path, file_name: &str) ->
         download_file(url, &file_folder.join(file_name), Some(sha256), false).unwrap();
     }
     Ok(())
+}
+
+/// retry download crates file when missing local file
+pub fn retry_download_crates(uri: &Uri, crates_path: PathBuf, name: &str, version: &str) {
+    let folder = crates_path.join(name);
+    let file = folder.join(format!("{}-{}.crate", name, version));
+    download_file(&uri.to_string(), &file, None, false).unwrap();
 }
 
 pub fn download_crates_with_log(

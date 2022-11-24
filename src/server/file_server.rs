@@ -1,3 +1,4 @@
+use log::info;
 use serde::Serialize;
 use std::{
     convert::Infallible,
@@ -9,33 +10,47 @@ use tokio::fs::File;
 use tokio_util::codec::{BytesCodec, FramedRead};
 use warp::{
     http,
-    hyper::{Body, Response},
+    http::StatusCode,
+    hyper::{Body, Response, Uri},
+    reject,
+    reject::Reject,
     Filter, Rejection, Reply,
 };
-use warp::{
-    http::StatusCode,
-    reject::{custom, Reject},
-};
 
+use crate::{config::Config, download::retry_download_crates};
 
+#[derive(Debug, PartialEq, Clone)]
+struct MissingFile {
+    domain: String,
+    name: String,
+    version: String,
+}
 
-#[derive(Debug, PartialEq)]
-struct Retry;
-
-impl Reject for Retry {}
+impl Reject for MissingFile {}
 
 /// start server
 #[tokio::main]
-pub async fn start(work_dir: PathBuf, socket_addr: SocketAddr) {
+pub async fn start(config: &Config, socket_addr: SocketAddr) {
+    let work_dir = config.work_dir.clone().unwrap();
+    let crates_redirect_domain = config
+        .crates
+        .redirect_domain
+        .clone()
+        .unwrap_or(String::from("https://rsproxy.cn"));
+
     let dist = warp::path("dist").and(warp::fs::dir(work_dir.join("dist")));
     let rustup = warp::path("rustup").and(warp::fs::dir(work_dir.join("rustup")));
 
-    let crates_route = warp::path!("crates" / String / String / "download").and_then(
-        move |name: String, version: String| {
-            let path = work_dir.clone();
-            async move { download_local_crates(path, &name, &version).await }
-        },
-    );
+    let crates_route =
+        warp::path!("crates" / String / String / "download").and_then(
+            move |name: String, version: String| {
+                let path = work_dir.clone();
+                let crates_redirect_domain = crates_redirect_domain.clone();
+                async move {
+                    download_local_crates(&crates_redirect_domain, path, &name, &version).await
+                }
+            },
+        );
 
     // GET /dist/... => ./dist/..
     let routes = dist.or(rustup).or(crates_route).recover(handle_rejection);
@@ -51,6 +66,7 @@ pub fn parse_ipaddr(listen: Option<IpAddr>, port: Option<u16>) -> SocketAddr {
 }
 
 async fn download_local_crates(
+    domain: &str,
     work_dir: PathBuf,
     name: &str,
     version: &str,
@@ -60,8 +76,20 @@ async fn download_local_crates(
         .join(name)
         .join(format!("{}-{}.crate", name, version));
 
-    let file = File::open(full_path).await.map_err(|_| custom(Retry))?;
-    let meta = file.metadata().await.map_err(|_| custom(Retry))?;
+    let missing_file = &MissingFile {
+        domain: domain.to_string(),
+        name: name.to_string(),
+        version: version.to_string(),
+    };
+
+    let file = File::open(full_path)
+        .await
+        .map_err(|_| reject::custom(missing_file.to_owned()))?;
+
+    let meta = file
+        .metadata()
+        .await
+        .map_err(|_| reject::custom(missing_file.to_owned()))?;
     let stream = FramedRead::new(file, BytesCodec::new());
 
     let body = Body::wrap_stream(stream);
@@ -86,7 +114,7 @@ struct ErrorMessage {
 
 /// ### References Codes
 ///
-/// - [warp](https://github.com/seanmonstar/warp)'s clone (example)[https://github.com/seanmonstar/warp/blob/master/examples/rejections.rs].
+/// - [warp](https://github.com/seanmonstar/warp)'s rejections (example)[https://github.com/seanmonstar/warp/blob/master/examples/rejections.rs].
 ///
 ///
 // This function receives a `Rejection` and tries to return a custom
@@ -95,15 +123,32 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     let code;
     let message;
 
-    println!("hanlde");
-    if let Some(retry) = err.find::<Retry>() {
-        println!("try to fetch for another source: {:?}", retry);
-        //TODO retry
+    // println!("hanlde err:{:?}", err);
+    if let Some(missing_file) = err.find::<MissingFile>() {
+        let uri: Uri = format!(
+            "{}/crates/{}/{}/download",
+            missing_file.domain, missing_file.name, missing_file.version
+        )
+        .parse()
+        .unwrap();
+        println!("can't found local file, redirect to : {}", uri);
+        retry_download_crates(
+            &uri,
+            PathBuf::new(),
+            &missing_file.name,
+            &missing_file.version,
+        );
+
+        return Ok(warp::redirect::found(uri));
     }
 
     if err.is_not_found() {
         code = StatusCode::NOT_FOUND;
         message = "NOT_FOUND";
+
+        println!("is_not_found err:{:?}", err);
+        let uri: Uri = "http://www.baidu.com".parse().unwrap();
+        return Ok(warp::redirect::found(uri));
     } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
         // This error happens if the body could not be deserialized correctly
         // We can use the cause to analyze the error and customize the error message
@@ -125,7 +170,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
         message = "METHOD_NOT_ALLOWED";
     } else {
         // We should have expected this... Just log and say its a 500
-        eprintln!("unhandled rejection: {:?}", err);
+        info!("unhandled rejection: {:?}", err);
         code = StatusCode::INTERNAL_SERVER_ERROR;
         message = "UNHANDLED_REJECTION";
     }
@@ -135,5 +180,8 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
         message: message.into(),
     });
 
-    Ok(warp::reply::with_status(json, code))
+    // Ok(warp::reply::with_status(json, code))
+    Ok(warp::redirect::found(Uri::from_static(
+        "https://cn.bing.com",
+    )))
 }

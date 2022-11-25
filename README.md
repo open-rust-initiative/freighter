@@ -18,6 +18,7 @@ When developing a program using Rust in a company, we need to host a proxy for c
 
 ### How to use the Freighter?
 
+
 ### How to contribute?
 
 This project enforce the [DCO](https://developercertificate.org).

@@ -28,7 +28,7 @@ use clap::{arg, ArgMatches};
 use crate::commands::command_prelude::*;
 use crate::config::Config;
 use crate::errors::FreightResult;
-use crate::server::file_server::{self, parse_ipaddr};
+use crate::server::file_server::{self, parse_ipaddr, FileServer};
 
 pub fn cli() -> clap::Command {
     clap::Command::new("server")
@@ -38,6 +38,14 @@ pub fn cli() -> clap::Command {
         )
         .arg(
             arg!(-d --"directory" <VALUE> "specify the file directory")
+                .value_parser(value_parser!(PathBuf)),
+        )
+        .arg(
+            arg!(-c --"cert-path" <VALUE> "Path to a TLS certificate file")
+                .value_parser(value_parser!(PathBuf)),
+        )
+        .arg(
+            arg!(-k --"key-path" <VALUE> "Path to a TLS key file")
                 .value_parser(value_parser!(PathBuf)),
         )
         .arg_required_else_help(true)
@@ -67,11 +75,19 @@ EXAMPLES
 ///
 ///
 pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
-
     let listen: Option<IpAddr> = args.get_one::<IpAddr>("ip").cloned();
     let port: Option<u16> = args.get_one::<u16>("port").cloned();
+    let cert_path: Option<PathBuf> = args.get_one::<PathBuf>("cert-path").cloned();
+    let key_path: Option<PathBuf> = args.get_one::<PathBuf>("key-path").cloned();
 
     let socket_addr = parse_ipaddr(listen, port);
-    file_server::start(config, socket_addr);
+
+    let file_server = &FileServer {
+        cert_path,
+        key_path,
+        socket_addr,
+    };
+
+    file_server::start(config, file_server);
     Ok(())
 }

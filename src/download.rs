@@ -5,22 +5,55 @@
 //!
 //!
 
-use std::io::Write;
-use std::path::PathBuf;
 use std::{
     fs::{self, File},
     io,
     path::Path,
-    sync::{Arc, Mutex},
 };
 
-use chrono::Utc;
 use log::{error, info, warn};
 use sha2::{Digest, Sha256};
-use warp::hyper::Uri;
 
-use crate::crates::crates_file::Crate;
 use crate::errors::{FreightResult, FreighterError};
+
+pub trait Download {
+    /// download file to a folder with given url and path
+    /// return false if connect success but download failed
+    fn download_to_folder(&self, url: &str, path: &Path, msg: &str)
+        -> Result<bool, FreighterError>;
+}
+
+#[derive(Default)]
+pub struct BlockingReqwest {}
+
+#[derive(Default)]
+pub struct Reqwest {}
+
+impl Download for BlockingReqwest {
+    fn download_to_folder(
+        &self,
+        url: &str,
+        path: &Path,
+        msg: &str,
+    ) -> Result<bool, FreighterError> {
+        // generate parent folder if unexist
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent).unwrap();
+            }
+        }
+        let mut resp = reqwest::blocking::get(url)?;
+        if resp.status() == 200 {
+            let mut out = File::create(path).unwrap();
+            io::copy(&mut resp, &mut out).unwrap();
+            info!("{} {:?}", msg, out);
+        } else {
+            error!("download failed, Please check your url: {}", url);
+            return Ok(false);
+        }
+        Ok(true)
+    }
+}
 
 // download remote sha file and then download file for hash check
 pub fn download_file_with_sha(url: &str, file_folder: &Path, file_name: &str) -> FreightResult {
@@ -37,49 +70,6 @@ pub fn download_file_with_sha(url: &str, file_folder: &Path, file_name: &str) ->
     Ok(())
 }
 
-/// retry download crates file when missing local file
-pub fn retry_download_crates(uri: &Uri, crates_path: PathBuf, name: &str, version: &str) {
-    let folder = crates_path.join(name);
-    let file = folder.join(format!("{}-{}.crate", name, version));
-    download_file(&uri.to_string(), &file, None, false).unwrap();
-}
-
-pub fn download_crates_with_log(
-    path: PathBuf,
-    upload: bool,
-    url: String,
-    c: Crate,
-    err_record: Arc<Mutex<File>>,
-) {
-    let url = format!("{}/{}/{}-{}.crate", url, &c.name, &c.name, &c.vers);
-    let folder = path.join(&c.name);
-    let file = folder.join(format!("{}-{}.crate", &c.name, &c.vers));
-    match download_file(&url, &file, Some(&c.cksum), false) {
-        Ok(download_succ) => {
-            if download_succ && upload {
-                upload_file(
-                    file.to_str().unwrap(),
-                    &c.name,
-                    format!("{}-{}.crate", &c.name, &c.vers).as_str(),
-                )
-                .unwrap();
-            }
-        }
-        Err(err) => {
-            let mut err_file = err_record.lock().unwrap();
-            writeln!(
-                err_file,
-                "{}-{}.crate, {}",
-                &c.name,
-                &c.vers,
-                Utc::now().timestamp()
-            )
-            .unwrap();
-            error!("{:?}", err);
-        }
-    }
-}
-
 /// download file from remote and calculate it's hash
 /// return true if download and success, return flase if file already exists
 pub fn download_file(
@@ -88,6 +78,7 @@ pub fn download_file(
     check_sum: Option<&str>,
     is_override: bool,
 ) -> Result<bool, FreighterError> {
+    let br = BlockingReqwest::default();
     if path.is_file() && path.exists() {
         let mut hasher = Sha256::new();
         let mut f = File::open(path)?;
@@ -103,7 +94,7 @@ pub fn download_file(
             } else {
                 warn!("!!![REMOVE] \t\t {:?} !", f);
                 fs::remove_file(path)?;
-                return download_with_folder(url, path, "!!![REMOVED DOWNLOAD] \t\t ");
+                return br.download_to_folder(url, path, "!!![REMOVED DOWNLOAD] \t\t ");
             }
         } else if !is_override {
             info!(
@@ -113,27 +104,7 @@ pub fn download_file(
             return Ok(false);
         }
     }
-    download_with_folder(url, path, "&&&[NEW] \t\t ")
-}
-
-/// return false if connect success but download failed
-pub fn download_with_folder(url: &str, path: &Path, msg: &str) -> Result<bool, FreighterError> {
-    // generate parent folder if unexist
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            fs::create_dir_all(parent).unwrap();
-        }
-    }
-    let mut resp = reqwest::blocking::get(url)?;
-    if resp.status() == 200 {
-        let mut out = File::create(path).unwrap();
-        io::copy(&mut resp, &mut out).unwrap();
-        info!("{} {:?}", msg, out);
-    } else {
-        error!("download failed, Please check your url: {}", url);
-        return Ok(false);
-    }
-    Ok(true)
+    br.download_to_folder(url, path, "&&&[NEW] \t\t ")
 }
 
 /// upload file to s3

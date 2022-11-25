@@ -1,6 +1,7 @@
 use chrono::Utc;
+use std::io::Write;
 
-use log::{info, warn};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
@@ -12,10 +13,10 @@ use std::str;
 use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
 
-use crate::cloud::s3::{S3cmd, CloudStorage};
+use crate::cloud::s3::{CloudStorage, S3cmd};
 use crate::config::CratesConfig;
 use crate::crates::index;
-use crate::download::download_crates_with_log;
+use crate::download::{download_file, upload_file};
 use crate::errors::FreightResult;
 
 use super::index::CrateIndex;
@@ -161,7 +162,9 @@ pub fn full_downloads(opts: &CratesOptions) -> FreightResult {
 
 pub fn upload_to_s3(opts: &CratesOptions) -> FreightResult {
     let s3cmd = S3cmd::default();
-    s3cmd.upload_folder(opts.crates_path.to_str().unwrap(), &opts.bucket_name).unwrap();
+    s3cmd
+        .upload_folder(opts.crates_path.to_str().unwrap(), &opts.bucket_name)
+        .unwrap();
     Ok(())
 }
 
@@ -202,14 +205,19 @@ pub fn parse_index_and_download(
                 let c: Crate = serde_json::from_str(&line).unwrap();
                 let err_record = Arc::clone(err_record);
                 let opts = opts.clone();
+
+                let url = format!(
+                    "{}/{}/{}-{}.crate",
+                    opts.config.domain, &c.name, &c.name, &c.vers
+                );
+
+                let file = opts
+                    .crates_path
+                    .join(&c.name)
+                    .join(format!("{}-{}.crate", &c.name, &c.vers));
+
                 pool.execute(move || {
-                    download_crates_with_log(
-                        opts.crates_path,
-                        opts.upload,
-                        opts.config.domain,
-                        c,
-                        err_record,
-                    );
+                    download_crates_with_log(file, opts.upload, url, c, err_record);
                 });
             }
         }
@@ -227,4 +235,39 @@ pub fn parse_index_and_download(
         },
     };
     Ok(())
+}
+
+pub fn download_crates_with_log(
+    file: PathBuf,
+    upload: bool,
+    url: String,
+    c: Crate,
+    err_record: Arc<Mutex<File>>,
+) {
+    match download_file(&url, &file, Some(&c.cksum), false) {
+        Ok(download_succ) => {
+            if download_succ && upload {
+                upload_file(
+                    file.to_str().unwrap(),
+                    &c.name,
+                    format!("{}-{}.crate", &c.name, &c.vers).as_str(),
+                )
+                .unwrap();
+            }
+        }
+        Err(err) => {
+            let mut err_file = err_record.lock().unwrap();
+            writeln!(
+                err_file,
+                "{}-{}.crate, {}",
+                &c.name,
+                &c.vers,
+                Utc::now().timestamp()
+            )
+            .unwrap();
+            error!("{:?}", err);
+        }
+    }
+
+
 }

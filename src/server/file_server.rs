@@ -42,8 +42,58 @@ impl Reject for MissingFile {}
 pub async fn start(config: &Config, file_server: &FileServer) {
     let work_dir = config.work_dir.clone().unwrap();
 
-    let dist = warp::path("dist").and(warp::fs::dir(work_dir.join("dist")));
-    let rustup = warp::path("rustup").and(warp::fs::dir(work_dir.join("rustup")));
+    let rustup_redirect_domain = config
+        .rustup
+        .redirect_domain
+        .clone()
+        .unwrap_or_else(|| String::from("https://static.rust-lang.org"));
+
+    let rustup_backup_domain = config.rustup.backup_domain.clone().unwrap_or_else(|| {
+        vec![
+            String::from("https://static.rust-lang.org"),
+            String::from("https://rsproxy.cn"),
+        ]
+    });
+
+    let work_dir2 = work_dir.clone();
+    let rustup_redirect_domain2 = rustup_redirect_domain.clone();
+    let rustup_backup_domain2 = rustup_backup_domain.clone();
+    let dist =
+        warp::path("dist")
+            .and(warp::path::tail())
+            .and_then(move |tail: warp::path::Tail| {
+                let redirect_domain = rustup_redirect_domain2.clone();
+                let backup_domain = rustup_backup_domain2.clone();
+                let full_path = work_dir2.join("dist").join(tail.as_str());
+                async move {
+                    download_local_crates(
+                        redirect_domain,
+                        backup_domain,
+                        format!("{}/{}", "dist", tail.as_str()),
+                        full_path,
+                    )
+                    .await
+                }
+            });
+
+    let work_dir3 = work_dir.clone();
+    let rustup =
+        warp::path("rustup")
+            .and(warp::path::tail())
+            .and_then(move |tail: warp::path::Tail| {
+                let redirect_domain = rustup_redirect_domain.clone();
+                let backup_domain = rustup_backup_domain.clone();
+                let full_path = work_dir3.join("rustup").join(tail.as_str());
+                async move {
+                    download_local_crates(
+                        redirect_domain,
+                        backup_domain,
+                        format!("{}/{}", "rustup", tail.as_str()),
+                        full_path,
+                    )
+                    .await
+                }
+            });
 
     let crates_redirect_domain = config
         .crates

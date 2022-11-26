@@ -26,7 +26,7 @@ download_threads = 2
 redirect_domain = "https://rsproxy.cn"
 
 # when local file does not exist, will try to download from these doamins
-backup_domain = ["https://static.crates.io/crates", "https://rsproxy.cn/crates"]
+backup_domain = ["https://rsproxy.cn", "https://static.crates.io"]
 
 [rustup]
 # download rustup from domain
@@ -135,6 +135,10 @@ sync_nightly_days = 30
 sync_beta_days = 30
 
 
+# when local file does not exist, redirect client to this domain
+redirect_domain = "https://static.rust-lang.org"
 
+# when local file does not exist, will try to download from these doamins
+backup_domain = ["https://rsproxy.cn", "https://static.rust-lang.org"]
 
 

@@ -44,6 +44,8 @@ pub struct RustUpConfig {
     pub sync_stable_versions: Vec<String>,
     pub sync_nightly_days: i64,
     pub sync_beta_days: i64,
+    pub redirect_domain: Option<String>,
+    pub backup_domain: Option<Vec<String>>,
 
 }
 

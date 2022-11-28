@@ -34,7 +34,7 @@ log4rs = {version = "1.2.0", features = ["toml_format"] }
 log = "0.4.17"
 tokio = { version = "1.22.0", features = ["full"] }
 warp = { version = "0.3.3", features = ["tls"] }
-tokio-util = { version = "0.6.8", features = ["codec"] }
+tokio-util = { version = "0.7.4", features = ["codec"] }
 
 [dev-dependencies]
 

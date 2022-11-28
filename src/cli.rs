@@ -1,17 +1,17 @@
 //! parse config from config.toml and read work-dir argument if provided.
 //!
-//! 
+//!
 //!   Arguments:
 //!   - __work-dir__(optional): specify the work dir, where to downlaod crates, rust toolchains and storage logs, default: $HOME/.freighter
 //!   
 //!   example:
-//! 
+//!
 //!   ```bash  
 //!   freighter --work-dir /mnt/data/
 //!   or
 //!   freighter -c /mnt/data/
 //!   ```
-//! 
+//!
 
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -45,15 +45,15 @@ pub type App = clap::Command;
 pub fn main(config: &mut Config) -> FreightResult {
     // log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
 
-    let args = cli().try_get_matches()?;
+    let args = cli().try_get_matches().unwrap_or_else(|e| e.exit());
 
-    let work_dir = match args.get_one::<String>("work-dir").cloned() {
-        Some(work_dir) => PathBuf::from(work_dir),
+    let root = match args.get_one::<String>("work-dir").cloned() {
+        Some(root) => PathBuf::from(root),
         None => dirs::home_dir().unwrap(),
     };
-    let mut config = config.load(&work_dir);
-    config.work_dir = Some(work_dir.clone());
-    init_log(&config.log, work_dir).unwrap();
+    let mut config = config.load(&root);
+
+    init_log(&config.log, root).unwrap();
 
     let (cmd, subcommand_args) = match args.subcommand() {
         Some((cmd, args)) => (cmd, args),
@@ -90,7 +90,9 @@ USAGE:
 
 Some common freight commands are (see all commands with --list):
     crates    Sync the index and crate files from the upstream to local, cloud or registry
-    rustup    Sync the rustup and toolchain files from the upstream to local, cloud or registry
+    rustup    Sync the rustup files from the upstream to local, cloud or registry
+    channel   Sync the toolchain files from the upstream to local, cloud or registry
+    server    Start git and file http server 
 
 See 'freight help <command>' for more information on a specific command.\n"
         )
@@ -107,9 +109,9 @@ pub fn execute_subcommand(config: &mut Config, cmd: &str, args: &ArgMatches) -> 
     }
 }
 /// read values(log format encoder, log limit and level) from config file
-/// and then initialize config for log4rs, log will preserve in /work_dir/log by default
-pub fn init_log(config: &LogConfig, work_dir: PathBuf) -> FreightResult {
-    let binding = work_dir.join("freighter/log/info.log");
+/// and then initialize config for log4rs, log will preserve in /root/freighter/log by default
+pub fn init_log(config: &LogConfig, root: PathBuf) -> FreightResult {
+    let binding = root.join("freighter/log/info.log");
     let log_path = binding.to_str().unwrap();
     let level = LevelFilter::from_str(&config.level).unwrap();
 

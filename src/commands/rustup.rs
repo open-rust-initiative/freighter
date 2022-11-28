@@ -88,8 +88,7 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
 
     let mut opts = RustUpOptions {
         config: config.rustup.to_owned(),
-        rustup_path: work_dir.join("freighter/rustup"),
-        ..Default::default()
+        rustup_path: work_dir.join("rustup"),
     };
 
     if let Some(domain) = args.get_one::<String>("domain").cloned() {

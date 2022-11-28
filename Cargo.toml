@@ -27,13 +27,14 @@ timer = "0.2.0"
 chrono = "0.4.22"
 rand = "0.8.5"
 sha2 = "0.10.5"
-sea-orm = { version = "0.10.3", features = [ "sqlx-mysql", "runtime-tokio-rustls", "macros" ] }
 threadpool = "1.8.1"
 dirs = "4.0.0"
 toml = "0.5.8"
 log4rs = {version = "1.2.0", features = ["toml_format"] }
 log = "0.4.17"
-
+tokio = { version = "1.22.0", features = ["full"] }
+warp = { version = "0.3.3", features = ["tls"] }
+tokio-util = { version = "0.6.8", features = ["codec"] }
 
 [dev-dependencies]
 

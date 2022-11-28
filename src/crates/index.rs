@@ -55,7 +55,7 @@ impl Default for CrateIndex {
         let home_path = dirs::home_dir().unwrap();
         CrateIndex {
             url: Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(),
-            path: home_path.join("freighter/crates.io-index"),
+            path: home_path.join("crates.io-index"),
         }
     }
 }
@@ -64,17 +64,14 @@ impl Default for CrateIndex {
 ///
 ///
 impl CrateIndex {
-    /// default crate registry
-    // const CRATE_REGISTRY: [&str; 3] = ["https://github.com/rust-lang/crates.io-index.git", "", ""];
     // use default branch master
     const REMOTE_BRANCH: &str = "master";
     // use default name origin
     const REMOTE_NAME: &str = "origin";
-
     /// Create a new `CrateIndex` from a `Work dir`.
     pub fn new(domain: &str, work_dir: PathBuf) -> Self {
         Self {
-            path: work_dir.join("freighter/crates.io-index"),
+            path: work_dir.join("crates.io-index"),
             url: Url::parse(domain).unwrap(),
         }
     }

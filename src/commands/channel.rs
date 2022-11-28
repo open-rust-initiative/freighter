@@ -107,7 +107,7 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
 
     let mut opts = ChannelOptions {
         config: config.rustup.to_owned(),
-        dist_path: work_dir.join("freighter/dist"),
+        dist_path: work_dir.join("dist"),
         ..Default::default()
     };
 

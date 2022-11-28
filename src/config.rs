@@ -11,7 +11,7 @@ use std::{
 };
 use serde::{Deserialize, Serialize};
 
-/// 
+/// parse config from file
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub work_dir: Option<PathBuf>,
@@ -32,9 +32,11 @@ pub struct CratesConfig {
     pub index_domain: String,
     pub domain: String,
     pub download_threads: usize,
+    pub redirect_domain: Option<String>,
+    pub backup_domain: Option<Vec<String>>,
 }
 
-/// config for rustup mirror sync 
+/// config for rustup mirror sync
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct RustUpConfig {
     pub domain: String,
@@ -42,6 +44,9 @@ pub struct RustUpConfig {
     pub sync_stable_versions: Vec<String>,
     pub sync_nightly_days: i64,
     pub sync_beta_days: i64,
+    pub redirect_domain: Option<String>,
+    pub backup_domain: Option<Vec<String>>,
+
 }
 
 ///
@@ -55,13 +60,15 @@ impl Config {
         }
     }
 
-    pub fn format_path(home_path: &Path) -> PathBuf {
-        home_path.join("freighter/config.toml")
+    pub fn format_path(root: &Path) -> PathBuf {
+        root.join("freighter/config.toml")
     }
 
-    pub fn load(&self, path: &Path) -> Config {
-        let path = Self::format_path(path);
-        Self::get_config(&path)
+    pub fn load(&self, root: &Path) -> Config {
+        let config_path = Self::format_path(root);
+        let mut config = Self::get_config(&config_path);
+        config.work_dir = Some(root.join("freighter"));
+        config
     }
 
     // read channel list from config file, if config file don't exist then it will be created from default file
@@ -84,7 +91,8 @@ impl Config {
         match toml::from_str(&content) {
             Ok(config) => config,
             Err(err) => panic!("Config file doesn't match, maybe it's outdated or you have provided a invalid value, 
-            you can manaully delete it and try again. Caused by {}", err),
+            you can manaully delete it and try again.
+            Caused by {}", err),
         }
     }
 }

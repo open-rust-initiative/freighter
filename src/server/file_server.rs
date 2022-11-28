@@ -58,42 +58,42 @@ pub async fn start(config: &Config, file_server: &FileServer) {
     let work_dir2 = work_dir.clone();
     let rustup_redirect_domain2 = rustup_redirect_domain.clone();
     let rustup_backup_domain2 = rustup_backup_domain.clone();
-    let dist =
-        warp::path("dist")
-            .and(warp::path::tail())
-            .and_then(move |tail: warp::path::Tail| {
-                let redirect_domain = rustup_redirect_domain2.clone();
-                let backup_domain = rustup_backup_domain2.clone();
-                let full_path = work_dir2.join("dist").join(tail.as_str());
-                async move {
-                    download_local_crates(
-                        redirect_domain,
-                        backup_domain,
-                        format!("{}/{}", "dist", tail.as_str()),
-                        full_path,
-                    )
-                    .await
-                }
-            });
+    let dist = warp::path("dist")
+        .and(warp::path::tail())
+        .and_then(move |tail: warp::path::Tail| {
+            let redirect_domain = rustup_redirect_domain2.clone();
+            let backup_domain = rustup_backup_domain2.clone();
+            let full_path = work_dir2.join("dist").join(tail.as_str());
+            async move {
+                download_local_files(
+                    redirect_domain,
+                    backup_domain,
+                    format!("{}/{}", "dist", tail.as_str()),
+                    full_path,
+                )
+                .await
+            }
+        })
+        .recover(handle_missing_file);
 
     let work_dir3 = work_dir.clone();
-    let rustup =
-        warp::path("rustup")
-            .and(warp::path::tail())
-            .and_then(move |tail: warp::path::Tail| {
-                let redirect_domain = rustup_redirect_domain.clone();
-                let backup_domain = rustup_backup_domain.clone();
-                let full_path = work_dir3.join("rustup").join(tail.as_str());
-                async move {
-                    download_local_crates(
-                        redirect_domain,
-                        backup_domain,
-                        format!("{}/{}", "rustup", tail.as_str()),
-                        full_path,
-                    )
-                    .await
-                }
-            });
+    let rustup = warp::path("rustup")
+        .and(warp::path::tail())
+        .and_then(move |tail: warp::path::Tail| {
+            let redirect_domain = rustup_redirect_domain.clone();
+            let backup_domain = rustup_backup_domain.clone();
+            let full_path = work_dir3.join("rustup").join(tail.as_str());
+            async move {
+                download_local_files(
+                    redirect_domain,
+                    backup_domain,
+                    format!("{}/{}", "rustup", tail.as_str()),
+                    full_path,
+                )
+                .await
+            }
+        })
+        .recover(handle_missing_file);
 
     let crates_redirect_domain = config
         .crates
@@ -124,8 +124,10 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         })
         .untuple_one();
 
-    let crates_route = crates_1.or(crates_2).unify().and_then(
-        move |url_path: String, name: String, version: String| {
+    let crates_route = crates_1
+        .or(crates_2)
+        .unify()
+        .and_then(move |url_path: String, name: String, version: String| {
             let redirect_domain = crates_redirect_domain.clone();
             let backup_domain = crates_backup_domain.clone();
             let full_path = work_dir
@@ -133,10 +135,10 @@ pub async fn start(config: &Config, file_server: &FileServer) {
                 .join(&name)
                 .join(format!("{}-{}.crate", name, version));
             async move {
-                download_local_crates(redirect_domain, backup_domain, url_path, full_path).await
+                download_local_files(redirect_domain, backup_domain, url_path, full_path).await
             }
-        },
-    );
+        })
+        .recover(handle_missing_file);
     // GET /dist/... => ./dist/..
     let routes = dist.or(rustup).or(crates_route).recover(handle_rejection);
 
@@ -172,7 +174,7 @@ pub fn parse_ipaddr(listen: Option<IpAddr>, port: Option<u16>) -> SocketAddr {
     SocketAddr::new(listen, port)
 }
 
-async fn download_local_crates(
+async fn download_local_files(
     redirect_domain: String,
     backup_domain: Vec<String>,
     url_path: String,
@@ -221,32 +223,9 @@ struct ErrorMessage {
 async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     let code;
     let message;
-
-    if let Some(missing_file) = err.find::<MissingFile>() {
-        let (redirect_domain, _, url_path, full_path) = (
-            &missing_file.redirect_domain,
-            &missing_file.backup_domain,
-            &missing_file.url_path,
-            &missing_file.full_path,
-        );
-        info!("{:?}", &missing_file);
-        let uri: Uri = format!("{}/{}", redirect_domain, url_path).parse().unwrap();
-        info!("can't found local file, redirect to : {}", uri);
-
-        download_from_remote(full_path.to_owned(), &uri)
-            .await
-            .unwrap();
-
-        return Ok(warp::redirect::found(uri));
-    }
-
     if err.is_not_found() {
         code = StatusCode::NOT_FOUND;
         message = "NOT_FOUND";
-
-        println!("is_not_found err:{:?}", err);
-        let uri: Uri = "http://www.baidu.com".parse().unwrap();
-        return Ok(warp::redirect::found(uri));
     } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
         // This error happens if the body could not be deserialized correctly
         // We can use the cause to analyze the error and customize the error message
@@ -273,15 +252,34 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
         message = "UNHANDLED_REJECTION";
     }
 
-    let _json = warp::reply::json(&ErrorMessage {
+    let json = warp::reply::json(&ErrorMessage {
         code: code.as_u16(),
         message: message.into(),
     });
 
-    // Ok(warp::reply::with_status(json, code))
-    Ok(warp::redirect::found(Uri::from_static(
-        "https://cn.bing.com",
-    )))
+    Ok(warp::reply::with_status(json, code))
+
+}
+
+async fn handle_missing_file(err: Rejection) -> Result<impl Reply, Rejection> {
+    if let Some(missing_file) = err.find::<MissingFile>() {
+        let (redirect_domain, _, url_path, full_path) = (
+            &missing_file.redirect_domain,
+            &missing_file.backup_domain,
+            &missing_file.url_path,
+            &missing_file.full_path,
+        );
+        info!("{:?}", &missing_file);
+        let uri: Uri = format!("{}/{}", redirect_domain, url_path).parse().unwrap();
+        info!("can't found local file, redirect to : {}", uri);
+
+        download_from_remote(full_path.to_owned(), &uri)
+            .await
+            .unwrap();
+
+        return Ok(warp::redirect::found(uri));
+    }
+    Err(err)
 }
 
 /// async download file from backup domain

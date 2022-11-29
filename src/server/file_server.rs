@@ -1,18 +1,26 @@
+use bytes::{Buf, BytesMut};
 use log::{error, info};
 use serde::Serialize;
 use std::{
     borrow::BorrowMut,
+    collections::HashMap,
     convert::Infallible,
     error::Error,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
+    process::Stdio,
 };
-use tokio::{fs::File, io::AsyncWriteExt};
+use tokio::{
+    fs::File,
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
+    process::{ChildStdout, Command},
+};
 use tokio_util::codec::{BytesCodec, FramedRead};
 use warp::{
     http,
     http::StatusCode,
-    hyper::{Body, Response, Uri},
+    hyper::{body::Sender, Body, Response, Uri},
+    path::Tail,
     reject,
     reject::Reject,
     Filter, Rejection, Reply,
@@ -40,6 +48,8 @@ impl Reject for MissingFile {}
 /// start server
 #[tokio::main]
 pub async fn start(config: &Config, file_server: &FileServer) {
+    tracing_subscriber::fmt::init();
+
     let work_dir = config.work_dir.clone().unwrap();
 
     let rustup_redirect_domain = config
@@ -124,6 +134,18 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         })
         .untuple_one();
 
+    let work_dir4 = work_dir.clone();
+    let git = warp::path("crates.io-index")
+        .and(warp::path::tail())
+        .and(warp::method())
+        .and(warp::body::aggregate())
+        .and(warp::header::optional::<String>("Content-Type"))
+        .and(warp::query::raw().or_else(|_| async { Ok::<(String,), Rejection>((String::new(),)) }))
+        .and_then(move |tail, method, body, content_type, query| {
+            let workdir = work_dir4.clone();
+            async move { fetch_git(workdir, tail, method, query, content_type, body).await }
+        });
+
     let crates_route = crates_1
         .or(crates_2)
         .unify()
@@ -140,7 +162,12 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         })
         .recover(handle_missing_file);
     // GET /dist/... => ./dist/..
-    let routes = dist.or(rustup).or(crates_route).recover(handle_rejection);
+    let routes = dist
+        .or(rustup)
+        .or(crates_route)
+        .or(git)
+        .recover(handle_rejection)
+        .with(warp::trace::request());
 
     let (cert_path, key_path, socket_addr) = (
         &file_server.cert_path,
@@ -258,7 +285,6 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     });
 
     Ok(warp::reply::with_status(json, code))
-
 }
 
 async fn handle_missing_file(err: Rejection) -> Result<impl Reply, Rejection> {
@@ -280,6 +306,82 @@ async fn handle_missing_file(err: Rejection) -> Result<impl Reply, Rejection> {
         return Ok(warp::redirect::found(uri));
     }
     Err(err)
+}
+
+/// ### References Codes
+///
+/// - [conduit-git-http-backend][https://github.com/conduit-rust/conduit-git-http-backend/blob/master/src/lib.rs].
+///
+///
+/// hanlde request from git client
+async fn fetch_git(
+    work_dir: PathBuf,
+    tail: Tail,
+    method: http::Method,
+    query: String,
+    content_type: Option<String>,
+    mut body: impl Buf,
+) -> Result<impl Reply, Rejection> {
+    let mut cmd = Command::new("git");
+    cmd.arg("http-backend");
+    cmd.env("GIT_PROJECT_ROOT", &work_dir);
+    cmd.env("PATH_INFO", format!("/crates.io-index/{}", tail.as_str()));
+    cmd.env("REQUEST_METHOD", method.as_str());
+    cmd.env("QUERY_STRING", query);
+    if let Some(content_type) = content_type {
+        cmd.env("CONTENT_TYPE", content_type);
+    }
+    cmd.env("GIT_HTTP_EXPORT_ALL", "true");
+    cmd.stderr(Stdio::inherit());
+    cmd.stdout(Stdio::piped());
+    cmd.stdin(Stdio::piped());
+
+    let p = cmd.spawn().unwrap();
+    let mut git_input = p.stdin.unwrap();
+
+    while body.has_remaining() {
+        git_input.write_all_buf(&mut body.chunk()).await.unwrap();
+        let cnt = body.chunk().len();
+        body.advance(cnt);
+    }
+
+    let mut git_output = BufReader::new(p.stdout.unwrap());
+    let mut headers = HashMap::new();
+    loop {
+        let mut line = String::new();
+        git_output.read_line(&mut line).await.unwrap();
+        let line = line.trim_end();
+        if line.is_empty() {
+            break;
+        }
+        if let Some((key, value)) = line.split_once(": ") {
+            headers.insert(key.to_string(), value.to_string());
+        }
+    }
+
+    let mut resp = Response::builder();
+    for (key, val) in headers {
+        resp = resp.header(&key, val);
+    }
+
+    let (sender, body) = Body::channel();
+    tokio::spawn(send_git(sender, git_output));
+    let resp = resp.body(body).unwrap();
+    Ok(resp)
+}
+
+async fn send_git(
+    mut sender: Sender,
+    mut git_output: BufReader<ChildStdout>,
+) -> Result<(), FreighterError> {
+    loop {
+        let mut bytes_out = BytesMut::new();
+        git_output.read_buf(&mut bytes_out).await?;
+        if bytes_out.is_empty() {
+            return Ok(());
+        }
+        sender.send_data(bytes_out.freeze()).await.unwrap();
+    }
 }
 
 /// async download file from backup domain

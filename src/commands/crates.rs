@@ -48,7 +48,7 @@
 //!  
 
 use clap::{arg, ArgMatches};
-use log::info;
+use log::{info, debug};
 
 use crate::commands::command_prelude::*;
 use crate::config::Config;
@@ -75,6 +75,8 @@ pub fn cli() -> clap::Command {
         .subcommand(subcommand("download")
             .arg(flag("init", "Start init download of crates file, this will traverse all index for full download"))
             .arg(flag("upload", "upload every crate file after download"))
+            .arg(arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files"))
+            .arg(flag("delete-after-download", "this will delete file after download"))
         )
         .subcommand_required(true)
         .arg_required_else_help(true)
@@ -142,7 +144,9 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         Some(("download", args)) => {
             opts.upload = args.get_flag("upload");
             opts.init_download = args.get_flag("init");
-
+            opts.delete_after_download = args.get_flag("delete-after-download");
+            opts.bucket_name = args.get_one::<String>("bucket").cloned().unwrap();
+            debug!("download command opts: {:?}", opts);
             if let Some(source) = domain {
                 config.crates.domain = source;
             }

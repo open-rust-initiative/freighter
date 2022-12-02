@@ -5,17 +5,17 @@ use std::{
 };
 
 use chrono::{Duration, NaiveDate, Utc};
-use log::{info, error};
+use log::{error, info};
 use serde::Deserialize;
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
 use crate::{
+    cloud::s3::{CloudStorage, S3cmd},
     config::RustUpConfig,
     download::{download_file, download_file_with_sha},
     errors::{FreightResult, FreighterError},
 };
-
 
 #[derive(Debug, Deserialize)]
 pub struct Channel {
@@ -56,6 +56,10 @@ pub struct ChannelOptions {
     pub dist_path: PathBuf,
 
     pub bucket_name: String,
+
+    pub upload: bool,
+
+    pub delete_after_upload: bool,
 }
 
 /// entrance function
@@ -87,8 +91,6 @@ pub fn sync_rust_toolchain(opts: &ChannelOptions) -> FreightResult {
     Ok(())
 }
 
-
-
 // sync the latest toolchain by given a channel name(stable, beta, nightly) or history verison by version number
 pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
     let channel_name;
@@ -116,8 +118,22 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
                         url.split('/').map(PathBuf::from).collect::<Vec<PathBuf>>()[4..].to_owned(),
                     )
                     .collect();
+                let (upload, dist_path, bucket_name, delete_after_upload) = (
+                    opts.upload,
+                    opts.dist_path.to_owned(),
+                    opts.bucket_name.to_owned(),
+                    opts.delete_after_upload,
+                );
+                let s3cmd = S3cmd::default();
                 pool.execute(move || {
-                    download_file(&url, &path, Some(&hash), false).unwrap();
+                    let downloaded = download_file(&url, &path, Some(&hash), false);
+                    if downloaded.is_ok() && upload {
+                        let uploaded =
+                            s3cmd.upload_folder(dist_path.to_str().unwrap(), &bucket_name);
+                        if uploaded.is_ok() && delete_after_upload {
+                            fs::remove_file(&path).unwrap();
+                        }
+                    }
                 });
             });
             pool.join();
@@ -204,4 +220,3 @@ pub fn compare_date(entry: &DirEntry, sync_days: i64) -> bool {
         false
     }
 }
-

@@ -9,7 +9,7 @@
 //!   - __download-threads__: specify the download threads to parallel download, 
 //!        this param can be changed in the configuration file or pass it here
 //!   - __no-progressbar__: not implemented
-//! 
+//!
 //! # download subcommand
 //!   - before each download, freighter will try to fetch the sha256 of the file and compare with local file if it exists
 //!         and will skip downloading if they are matching.
@@ -23,9 +23,9 @@
 //!
 //!   Arguments:
 //!   - __clean__: clean history files read by config file after download successfully.
-//!   - __version__: only download the version you specified, 
+//!   - __version__: only download the version you specified,
 //!         you can provide any version format supported by rust-org, such as stable, beta or nightly-2022-07-31.
-//! 
+//!
 //! # upload subcommand
 //!   upload file to Object Storage Service compatible with [AWS S3](https://aws.amazon.com/s3/)
 //!     - Digitalocean Spaces
@@ -35,7 +35,7 @@
 //!     - AWS S3
 //!     - minio
 //!     - Ceph
-//! 
+//!
 //!   Arguments:
 //!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param before upload.
 //!   
@@ -43,7 +43,7 @@
 use clap::{arg, ArgMatches};
 use log::info;
 
-use crate::cloud::s3::{S3cmd, CloudStorage};
+use crate::cloud::s3::{CloudStorage, S3cmd};
 use crate::commands::command_prelude::*;
 use crate::config::Config;
 use crate::crates::channel::{sync_rust_toolchain, ChannelOptions};
@@ -54,6 +54,9 @@ pub fn cli() -> clap::Command {
         .subcommand(subcommand("download")
             .arg(flag("clean", "clean up historical versions"))
             .arg(arg!(-v --"version" <VALUE> "only download the version you specified"))
+            .arg(flag("upload", "upload every crate file after download"))
+            .arg(arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files"))
+            .arg(flag("delete-after-upload", "this will delete file after upload"))
         )
         .subcommand(subcommand("upload")
         .arg(
@@ -122,15 +125,28 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
     info!("ChannelOptions info : {:#?}", opts);
 
     match args.subcommand() {
-        Some(("download", args)) => sync_rust_toolchain(&ChannelOptions {
-            clean: args.get_flag("clean"),
-            version: args.get_one::<String>("version").cloned(),
-            ..opts
-        })?,
+        Some(("download", args)) => {
+            let bucket_name = args.get_one::<String>("bucket").cloned();
+            let upload = args.get_flag("upload");
+            if upload && bucket_name.is_none() {
+                unreachable!("can not upload with empty bucket name")
+            }
+
+            sync_rust_toolchain(&ChannelOptions {
+                clean: args.get_flag("clean"),
+                version: args.get_one::<String>("version").cloned(),
+                upload: upload,
+                delete_after_upload: args.get_flag("delete-after-upload"),
+                bucket_name: bucket_name.unwrap(),
+                ..opts
+            })?
+        },
         Some(("upload", args)) => {
             let bucket_name = args.get_one::<String>("bucket").cloned().unwrap();
             let s3cmd = S3cmd::default();
-            s3cmd.upload_folder(opts.dist_path.to_str().unwrap(), &bucket_name).unwrap();
+            s3cmd
+                .upload_folder(opts.dist_path.to_str().unwrap(), &bucket_name)
+                .unwrap();
         }
         Some((cmd, _)) => {
             unreachable!("unexpected command {}", cmd)

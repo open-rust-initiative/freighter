@@ -9,7 +9,7 @@ use std::io::Write;
 
 
 use std::collections::BTreeMap;
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, self};
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::str;
@@ -24,7 +24,7 @@ use chrono::Utc;
 use crate::cloud::s3::{CloudStorage, S3cmd};
 use crate::config::CratesConfig;
 use crate::crates::index;
-use crate::download::{download_file, upload_file};
+use crate::download::download_file;
 use crate::errors::FreightResult;
 
 use super::index::CrateIndex;
@@ -48,6 +48,8 @@ pub struct CratesOptions {
     pub log_path: PathBuf,
 
     pub bucket_name: String,
+
+    pub delete_after_upload: bool,
 }
 
 /// Crate preserve the crates info parse from registry json file
@@ -225,7 +227,7 @@ pub fn parse_index_and_download(
                     .join(format!("{}-{}.crate", &c.name, &c.vers));
 
                 pool.execute(move || {
-                    download_crates_with_log(file, opts.upload, url, c, err_record);
+                    download_crates_with_log(file, &opts, url, c, err_record);
                 });
             }
         }
@@ -247,20 +249,21 @@ pub fn parse_index_and_download(
 
 pub fn download_crates_with_log(
     file: PathBuf,
-    upload: bool,
+    opts: &CratesOptions,
     url: String,
     c: Crate,
     err_record: Arc<Mutex<File>>,
 ) {
     match download_file(&url, &file, Some(&c.cksum), false) {
         Ok(download_succ) => {
-            if download_succ && upload {
-                upload_file(
-                    file.to_str().unwrap(),
-                    &c.name,
-                    format!("{}-{}.crate", &c.name, &c.vers).as_str(),
-                )
-                .unwrap();
+            if download_succ && opts.upload {
+                let s3 = S3cmd::default();
+                let s3_path = file.to_str().unwrap().replace(opts.crates_path.to_str().unwrap(), "");
+                info!("s3_path: {}, {}", s3_path, opts.delete_after_upload);
+                let uploded = s3.upload_file(&file, &s3_path, &opts.bucket_name);
+                if uploded.is_ok() && opts.delete_after_upload {
+                    fs::remove_file(file).unwrap();
+                }
             }
         }
         Err(err) => {
@@ -276,6 +279,4 @@ pub fn download_crates_with_log(
             error!("{:?}", err);
         }
     }
-
-
 }

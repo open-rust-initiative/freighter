@@ -26,7 +26,7 @@ use warp::{
     Filter, Rejection, Reply,
 };
 
-use crate::{config::Config, errors::FreighterError};
+use crate::{config::Config, errors::{FreighterError, FreightResult}};
 
 #[derive(Debug, PartialEq, Clone)]
 struct MissingFile {
@@ -50,31 +50,23 @@ impl Reject for MissingFile {}
 pub async fn start(config: &Config, file_server: &FileServer) {
     let work_dir = config.work_dir.clone().unwrap();
 
-    let rustup_redirect_domain = config
-        .rustup
-        .redirect_domain
-        .clone()
-        .unwrap_or_else(|| String::from("https://static.rust-lang.org"));
-
     let rustup_backup_domain = config.rustup.backup_domain.clone().unwrap_or_else(|| {
         vec![
+            String::from("localhost"),
             String::from("https://static.rust-lang.org"),
             String::from("https://rsproxy.cn"),
         ]
     });
 
     let work_dir2 = work_dir.clone();
-    let rustup_redirect_domain2 = rustup_redirect_domain.clone();
     let rustup_backup_domain2 = rustup_backup_domain.clone();
     let dist = warp::path("dist")
         .and(warp::path::tail())
         .and_then(move |tail: warp::path::Tail| {
-            let redirect_domain = rustup_redirect_domain2.clone();
             let backup_domain = rustup_backup_domain2.clone();
             let full_path = work_dir2.join("dist").join(tail.as_str());
             async move {
-                download_local_files(
-                    redirect_domain,
+                return_files(
                     backup_domain,
                     format!("{}/{}", "dist", tail.as_str()),
                     full_path,
@@ -88,12 +80,10 @@ pub async fn start(config: &Config, file_server: &FileServer) {
     let rustup = warp::path("rustup")
         .and(warp::path::tail())
         .and_then(move |tail: warp::path::Tail| {
-            let redirect_domain = rustup_redirect_domain.clone();
             let backup_domain = rustup_backup_domain.clone();
             let full_path = work_dir3.join("rustup").join(tail.as_str());
             async move {
-                download_local_files(
-                    redirect_domain,
+                return_files(
                     backup_domain,
                     format!("{}/{}", "rustup", tail.as_str()),
                     full_path,
@@ -102,12 +92,6 @@ pub async fn start(config: &Config, file_server: &FileServer) {
             }
         })
         .recover(handle_missing_file);
-
-    let crates_redirect_domain = config
-        .crates
-        .redirect_domain
-        .clone()
-        .unwrap_or_else(|| String::from("https://rsproxy.cn"));
 
     let crates_backup_domain = config.crates.backup_domain.clone().unwrap_or_else(|| {
         vec![
@@ -136,15 +120,12 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         .or(crates_2)
         .unify()
         .and_then(move |url_path: String, name: String, version: String| {
-            let redirect_domain = crates_redirect_domain.clone();
             let backup_domain = crates_backup_domain.clone();
             let full_path = work_dir
                 .join("crates")
                 .join(&name)
                 .join(format!("{}-{}.crate", name, version));
-            async move {
-                download_local_files(redirect_domain, backup_domain, url_path, full_path).await
-            }
+            async move { return_files(backup_domain, url_path, full_path).await }
         })
         .recover(handle_missing_file);
     // GET /dist/... => ./dist/..
@@ -182,27 +163,12 @@ pub fn parse_ipaddr(listen: Option<IpAddr>, port: Option<u16>) -> SocketAddr {
     SocketAddr::new(listen, port)
 }
 
-async fn download_local_files(
-    redirect_domain: String,
-    backup_domain: Vec<String>,
-    url_path: String,
-    full_path: PathBuf,
-) -> Result<Response<Body>, Rejection> {
-    let missing_file = &MissingFile {
-        redirect_domain,
-        backup_domain,
-        url_path,
-        full_path: full_path.clone(),
-    };
-
+async fn download_local_files(full_path: &PathBuf) -> Result<Response<Body>, Rejection> {
     let file = File::open(full_path)
         .await
-        .map_err(|_| reject::custom(missing_file.to_owned()))?;
+        .map_err(|_| reject::not_found())?;
 
-    let meta = file
-        .metadata()
-        .await
-        .map_err(|_| reject::custom(missing_file.to_owned()))?;
+    let meta = file.metadata().await.map_err(|_| reject::not_found())?;
     let stream = FramedRead::new(file, BytesCodec::new());
 
     let body = Body::wrap_stream(stream);
@@ -212,6 +178,32 @@ async fn download_local_files(
         .insert(http::header::CONTENT_LENGTH, meta.len().into());
 
     Ok(resp)
+}
+
+async fn return_files(
+    backup_domain: Vec<String>,
+    url_path: String,
+    full_path: PathBuf,
+) -> Result<Response<Body>, Rejection> {
+    for domain in backup_domain {
+        if domain.eq("localhost") {
+            let res = download_local_files(&full_path).await;
+            if res.is_ok() {
+                return res;
+            }
+        } else {
+            let uri: Uri = format!("{}/{}", domain, url_path).parse().unwrap();
+            info!("try to fetch file from remote: {}", uri);
+
+            let downloaded = download_from_remote(full_path.to_owned(), &uri)
+                .await;
+            if downloaded.is_ok() {
+                let res = download_local_files(&full_path).await;
+                return res;
+            }
+        }
+    }
+    Err(reject::not_found())
 }
 
 /// An API error serializable to JSON.
@@ -266,7 +258,6 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     });
 
     Ok(warp::reply::with_status(json, code))
-
 }
 
 async fn handle_missing_file(err: Rejection) -> Result<impl Reply, Rejection> {
@@ -291,7 +282,7 @@ async fn handle_missing_file(err: Rejection) -> Result<impl Reply, Rejection> {
 }
 
 /// async download file from backup domain
-async fn download_from_remote(path: PathBuf, uri: &Uri) -> Result<bool, FreighterError> {
+async fn download_from_remote(path: PathBuf, uri: &Uri) -> FreightResult {
     if let Some(parent) = path.parent() {
         if !parent.exists() {
             tokio::fs::create_dir_all(parent).await?;
@@ -306,7 +297,7 @@ async fn download_from_remote(path: PathBuf, uri: &Uri) -> Result<bool, Freighte
         info!("{} {:?}", "&&&[NEW] \t\t ", file);
     } else {
         error!("download failed, Please check your url: {}", uri);
-        return Ok(false);
+        return Err(FreighterError::code(resp.status().as_u16().into()));
     }
-    Ok(true)
+    Ok(())
 }

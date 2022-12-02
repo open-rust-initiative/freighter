@@ -1,3 +1,10 @@
+//!
+//!
+//!
+//!
+//!
+//!
+
 use std::{
     collections::HashMap,
     fs::{self, DirEntry},
@@ -76,11 +83,11 @@ pub fn sync_rust_toolchain(opts: &ChannelOptions) -> FreightResult {
     }
     // step2: clean historical channel files if needed
     if opts.clean {
-        let channles = [
+        let channels = [
             ("beta", config.sync_beta_days),
             ("nightly", config.sync_nightly_days),
         ];
-        for channel in channles {
+        for channel in channels {
             clean_historical_version(&opts.dist_path, channel).unwrap();
         }
     }
@@ -89,7 +96,7 @@ pub fn sync_rust_toolchain(opts: &ChannelOptions) -> FreightResult {
 
 
 
-// sync the latest toolchain by given a channel name(stable, beta, nightly) or history verison by version number
+// sync the latest toolchain by given a channel name(stable, beta, nightly) or history version by version number
 pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
     let channel_name;
     let channel_url;
@@ -176,7 +183,7 @@ pub fn clean_historical_version(dist_path: &PathBuf, channels: (&str, i64)) -> F
                         info!("!!![REMOVE] \t\t {:?} !", entry.path());
                     }
                 });
-            // remvoe whole directory when it's empty
+            // remove whole directory when it's empty
             if entry.path().read_dir().unwrap().next().is_none() {
                 fs::remove_dir_all(entry.path()).unwrap();
                 info!("!!![REMOVE] \t\t {:?} !", entry.path());

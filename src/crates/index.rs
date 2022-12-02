@@ -255,7 +255,7 @@ pub fn pull(opts: &mut CratesOptions) -> FreightResult {
             );
             match fs::remove_dir_all(index_dir) {
                 Ok(_) => index.git_clone(opts).unwrap(),
-                Err(e) => panic!("Remove index failed, try to delete it manualy: {}", e),
+                Err(e) => panic!("Remove index failed, try to delete it manually: {}", e),
             };
         } else {
             index.git_pull(opts).unwrap();

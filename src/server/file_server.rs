@@ -1,5 +1,10 @@
-use log::{error, info};
-use serde::Serialize;
+//!
+//!
+//!
+//!
+//!
+//!
+
 use std::{
     borrow::BorrowMut,
     convert::Infallible,
@@ -7,6 +12,9 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
 };
+
+use log::{error, info};
+use serde::Serialize;
 use tokio::{fs::File, io::AsyncWriteExt};
 use tokio_util::codec::{BytesCodec, FramedRead};
 use warp::{
@@ -240,7 +248,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
             None => "BAD_REQUEST",
         };
         code = StatusCode::BAD_REQUEST;
-    } else if err.find::<warp::reject::MethodNotAllowed>().is_some() {
+    } else if err.find::<reject::MethodNotAllowed>().is_some() {
         // We can handle a specific error, here METHOD_NOT_ALLOWED,
         // and render it however we want
         code = StatusCode::METHOD_NOT_ALLOWED;
@@ -291,7 +299,7 @@ async fn download_from_remote(path: PathBuf, uri: &Uri) -> Result<bool, Freighte
     }
     let mut resp = reqwest::get(uri.to_string()).await?;
     if resp.status() == 200 {
-        let mut file = tokio::fs::File::create(path).await?;
+        let mut file = File::create(path).await?;
         while let Some(mut data) = resp.chunk().await? {
             file.write_all_buf(data.borrow_mut()).await?;
         }

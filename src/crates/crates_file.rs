@@ -41,7 +41,7 @@ pub struct CratesOptions {
 
     pub bucket_name: String,
 
-    pub delete_after_download: bool,
+    pub delete_after_upload: bool,
 }
 
 /// Crate preserve the crates info parse from registry json file
@@ -251,9 +251,9 @@ pub fn download_crates_with_log(
             if download_succ && opts.upload {
                 let s3 = S3cmd::default();
                 let s3_path = file.to_str().unwrap().replace(opts.crates_path.to_str().unwrap(), "");
-                info!("s3_path: {}, {}", s3_path, opts.delete_after_download);
+                info!("s3_path: {}, {}", s3_path, opts.delete_after_upload);
                 let uploded = s3.upload_file(&file, &s3_path, &opts.bucket_name);
-                if uploded.is_ok() && opts.delete_after_download {
+                if uploded.is_ok() && opts.delete_after_upload {
                     fs::remove_file(file).unwrap();
                 }
             }

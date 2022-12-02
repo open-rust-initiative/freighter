@@ -12,7 +12,7 @@
 //!   - crates file is in the format of "/crates/crates-name/0.1.0/download"
 //!
 //! # handle rustup-init file requests
-//!   - rustup-init file is in the format of "/rustup/dist/aarch64-fuschia"
+//!   - rustup-init file is in the format of "/rustup/dist/aarch64-fuchsia"
 //!   
 //! # handle rust toolchain file requests
 //!   - rust toolchain file is in the format of "/dist/2022-11-03/rust-1.65.0-aarch64-unknown-linux-gnu.tar.gz"

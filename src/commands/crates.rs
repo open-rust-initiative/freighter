@@ -4,7 +4,7 @@
 //! **crates** subcommand provide major functions include:
 //!
 //!   Arguments:
-//!   - __domain__: you can choose your own upstream by adding this arugment in command,
+//!   - __domain__: you can choose your own upstream by adding this argument in command,
 //!         this param can be changed in the configuration file or pass it here
 //!   - __download-threads__: specify the download threads to parallel download,
 //!         this param can be changed in the configuration file or pass it here
@@ -46,7 +46,7 @@
 //!     - minio
 //!     - Ceph
 //!   Arguments:
-//!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param befor uplaod.
+//!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param before upload.
 //!  
 
 use clap::{arg, ArgMatches};
@@ -99,7 +99,7 @@ EXAMPLES
 
        freighter -c /mnt/volume_fra1_01 crates pull
 
-2. Download all crates file and uoload:
+2. Download all crates file and unload:
 
        freighter crates download --init --upload
 

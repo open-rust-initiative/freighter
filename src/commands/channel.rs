@@ -5,8 +5,8 @@
 //! **channel** subcommand provide major functions include:
 //!
 //!   Arguments:
-//!   - __domain__: you can choose your own upstream by adding this arugment in command
-//!   - __download-threads__: specify the download threads to parallel download,
+//!   - __domain__: you can choose your own upstream by adding this argument in command
+//!   - __download-threads__: specify the download threads to parallel download, 
 //!        this param can be changed in the configuration file or pass it here
 //!   - __no-progressbar__: not implemented
 //!
@@ -14,7 +14,7 @@
 //!   - before each download, freighter will try to fetch the sha256 of the file and compare with local file if it exists
 //!         and will skip downloading if they are matching.
 //!   
-//!   - sync serveral rust toolchains version from upstream to local
+//!   - sync server rust toolchains version from upstream to local
 //!     - by default, this subcommand will fetch latest stable, beta, nightly and
 //!         the specified version in your toml config file: __rustup.sync_stable_versions__
 //!     - if you are using --version arguments in subcommand, freighter will only download the version you specified,
@@ -37,7 +37,7 @@
 //!     - Ceph
 //!
 //!   Arguments:
-//!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param befor uplaod.
+//!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param before upload.
 //!   
 
 use clap::{arg, ArgMatches};
@@ -73,7 +73,7 @@ pub fn cli() -> clap::Command {
         .arg(arg!(-d --"domain" <VALUE> "specify the source you want to sync from"))
         .help_template(
             "\
-Sync the rust toolchian files from the upstream(static.rust-lang.org) to the local filesystem, other cloud
+Sync the rust toolchain files from the upstream(static.rust-lang.org) to the local filesystem, other cloud
 storage services, or other registries.
 
 USAGE:

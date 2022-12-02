@@ -89,7 +89,7 @@ impl Config {
         match toml::from_str(&content) {
             Ok(config) => config,
             Err(err) => panic!("Config file doesn't match, maybe it's outdated or you have provided a invalid value, 
-            you can manaully delete it and try again.
+            you can manually delete it and try again.
             Caused by {}", err),
         }
     }

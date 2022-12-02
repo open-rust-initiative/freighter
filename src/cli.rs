@@ -2,7 +2,7 @@
 //!
 //!
 //!   Arguments:
-//!   - __work-dir__(optional): specify the work dir, where to downlaod crates, rust toolchains and storage logs, default: $HOME/.freighter
+//!   - __work-dir__(optional): specify the work dir, where to download crates, rust toolchains and storage logs, default: $HOME/.freighter
 //!   
 //!   example:
 //!
@@ -79,7 +79,7 @@ fn cli() -> App {
         .override_usage(usage)
         .author("Open Rust Initiative")
         .arg(arg!(-c --"work-dir" <FILE> "specify the work dir,
-             where to downlaod crates, rust toolchains and storage logs, default: $HOME/.freighter")
+             where to download crates, rust toolchains and storage logs, default: $HOME/.freighter")
         )
         .help_template(
             "\

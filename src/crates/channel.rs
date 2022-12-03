@@ -98,8 +98,6 @@ pub fn sync_rust_toolchain(opts: &ChannelOptions) -> FreightResult {
     Ok(())
 }
 
-
-
 // sync the latest toolchain by given a channel name(stable, beta, nightly) or history version by version number
 pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
     let channel_name;
@@ -137,8 +135,13 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
                 pool.execute(move || {
                     let downloaded = download_file(&url, &path, Some(&hash), false);
                     if downloaded.is_ok() && upload {
-                        let uploaded =
-                            s3cmd.upload_folder(dist_path.to_str().unwrap(), &bucket_name);
+                        let s3_path = format!(
+                            "dist{}",
+                            path.to_str()
+                                .unwrap()
+                                .replace(dist_path.to_str().unwrap(), "")
+                        );
+                        let uploaded = s3cmd.upload_file(&path, &s3_path, &bucket_name);
                         if uploaded.is_ok() && delete_after_upload {
                             fs::remove_file(&path).unwrap();
                         }

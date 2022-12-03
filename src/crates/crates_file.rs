@@ -7,19 +7,18 @@
 
 use std::io::Write;
 
-
 use std::collections::BTreeMap;
-use std::fs::{File, OpenOptions, self};
+use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::str;
 use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
 
+use chrono::Utc;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
-use chrono::Utc;
 
 use crate::cloud::s3::{CloudStorage, S3cmd};
 use crate::config::CratesConfig;
@@ -258,7 +257,12 @@ pub fn download_crates_with_log(
         Ok(download_succ) => {
             if download_succ && opts.upload {
                 let s3 = S3cmd::default();
-                let s3_path = file.to_str().unwrap().replace(opts.crates_path.to_str().unwrap(), "");
+                let s3_path = format!(
+                    "crates{}",
+                    file.to_str()
+                        .unwrap()
+                        .replace(opts.crates_path.to_str().unwrap(), "")
+                );
                 info!("s3_path: {}, {}", s3_path, opts.delete_after_upload);
                 let uploded = s3.upload_file(&file, &s3_path, &opts.bucket_name);
                 if uploded.is_ok() && opts.delete_after_upload {

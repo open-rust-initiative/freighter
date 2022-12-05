@@ -40,7 +40,8 @@ struct MissingFile {
 pub struct FileServer {
     pub cert_path: Option<PathBuf>,
     pub key_path: Option<PathBuf>,
-    pub socket_addr: SocketAddr,
+    pub addr: Option<IpAddr>,
+    pub port: Option<u16>,
 }
 
 impl Reject for MissingFile {}
@@ -95,6 +96,7 @@ pub async fn start(config: &Config, file_server: &FileServer) {
 
     let crates_backup_domain = config.crates.backup_domain.clone().unwrap_or_else(|| {
         vec![
+            String::from("localhost"),
             String::from("https://rsproxy.cn"),
             String::from("https://static.crates.io"),
         ]
@@ -102,7 +104,7 @@ pub async fn start(config: &Config, file_server: &FileServer) {
     let crates_1 = warp::path!("crates" / String / String / "download")
         .map(|name: String, version: String| {
             (
-                format!("crates/{}/{}download", &name, &version),
+                format!("crates/{}/{}/download", &name, &version),
                 name,
                 version,
             )
@@ -131,14 +133,17 @@ pub async fn start(config: &Config, file_server: &FileServer) {
     // GET /dist/... => ./dist/..
     let routes = dist.or(rustup).or(crates_route).recover(handle_rejection);
 
-    let (cert_path, key_path, socket_addr) = (
+    let (cert_path, key_path, addr, port) = (
         &file_server.cert_path,
         &file_server.key_path,
-        file_server.socket_addr,
+        file_server.addr,
+        file_server.port,
     );
+
 
     match (cert_path, key_path) {
         (Some(cert_path), Some(key_path)) => {
+            let socket_addr = parse_ipaddr(addr, port, true);
             warp::serve(routes)
                 .tls()
                 .cert_path(cert_path)
@@ -146,7 +151,10 @@ pub async fn start(config: &Config, file_server: &FileServer) {
                 .run(socket_addr)
                 .await;
         }
-        (None, None) => warp::serve(routes).run(socket_addr).await,
+        (None, None) => {
+            let socket_addr = parse_ipaddr(addr, port, false);
+            warp::serve(routes).run(socket_addr).await
+        },
         (Some(_), None) => {
             error!("set cert_path but not set key_path.")
         }
@@ -157,9 +165,12 @@ pub async fn start(config: &Config, file_server: &FileServer) {
 }
 
 /// parse address with ip and port
-pub fn parse_ipaddr(listen: Option<IpAddr>, port: Option<u16>) -> SocketAddr {
+pub fn parse_ipaddr(listen: Option<IpAddr>, port: Option<u16>, use_ssl: bool) -> SocketAddr {
     let listen = listen.unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
-    let port = port.unwrap_or(8080);
+    let mut port = port.unwrap_or(8080);
+    if use_ssl {
+        port = 443;
+    }
     SocketAddr::new(listen, port)
 }
 
@@ -187,6 +198,7 @@ async fn return_files(
 ) -> Result<Response<Body>, Rejection> {
     for domain in backup_domain {
         if domain.eq("localhost") {
+            info!("try to fetch file from local: {}", full_path.display());
             let res = download_local_files(&full_path).await;
             if res.is_ok() {
                 return res;

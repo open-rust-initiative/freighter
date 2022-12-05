@@ -32,7 +32,6 @@ pub struct CratesConfig {
     pub index_domain: String,
     pub domain: String,
     pub download_threads: usize,
-    pub redirect_domain: Option<String>,
     pub backup_domain: Option<Vec<String>>,
 }
 
@@ -44,7 +43,6 @@ pub struct RustUpConfig {
     pub sync_stable_versions: Vec<String>,
     pub sync_nightly_days: i64,
     pub sync_beta_days: i64,
-    pub redirect_domain: Option<String>,
     pub backup_domain: Option<Vec<String>>,
 
 }
@@ -91,7 +89,7 @@ impl Config {
         match toml::from_str(&content) {
             Ok(config) => config,
             Err(err) => panic!("Config file doesn't match, maybe it's outdated or you have provided a invalid value, 
-            you can manaully delete it and try again.
+            you can manually delete it and try again.
             Caused by {}", err),
         }
     }

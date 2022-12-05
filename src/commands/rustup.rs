@@ -5,8 +5,8 @@
 //! **rustup** subcommand provide major functions include:
 //!
 //!   Arguments:
-//!   - __domain__: you can choose your own upstream by adding this arugment in command
-//!   - __download-threads__: specify the download threads to parallel download,
+//!   - __domain__: you can choose your own upstream by adding this argument in command
+//!   - __download-threads__: specify the download threads to parallel download, 
 //!        this param can be changed in the configuration file or pass it here
 //!
 //! # download subcommand
@@ -26,7 +26,7 @@
 //!     - Ceph
 //!
 //!   Arguments:
-//!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param befor uplaod.
+//!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param before upload.
 //!   
 
 use clap::{arg, ArgMatches};

@@ -12,7 +12,7 @@
 //!   - crates file is in the format of "/crates/crates-name/0.1.0/download"
 //!
 //! # handle rustup-init file requests
-//!   - rustup-init file is in the format of "/rustup/dist/aarch64-fuschia"
+//!   - rustup-init file is in the format of "/rustup/dist/aarch64-fuchsia"
 //!   
 //! # handle rust toolchain file requests
 //!   - rust toolchain file is in the format of "/dist/2022-11-03/rust-1.65.0-aarch64-unknown-linux-gnu.tar.gz"
@@ -28,17 +28,13 @@ use clap::{arg, ArgMatches};
 use crate::commands::command_prelude::*;
 use crate::config::Config;
 use crate::errors::FreightResult;
-use crate::server::file_server::{self, parse_ipaddr, FileServer};
+use crate::server::file_server::{self, FileServer};
 
 pub fn cli() -> clap::Command {
     clap::Command::new("server")
         .arg(arg!(-i --"ip" <VALUE> "specify the ip address").value_parser(value_parser!(IpAddr)))
         .arg(
             arg!(-p --"port" <VALUE> "specify the listening port").value_parser(value_parser!(u16)),
-        )
-        .arg(
-            arg!(-d --"directory" <VALUE> "specify the file directory")
-                .value_parser(value_parser!(PathBuf)),
         )
         .arg(
             arg!(-c --"cert-path" <VALUE> "Path to a TLS certificate file")
@@ -65,6 +61,9 @@ EXAMPLES
 
        freighter server -p 8080 
 
+2. Start server with certificate
+
+       freighter server -p 443 --cert-path /home/cert --key-path /home/key
 
 \n",
         )
@@ -75,17 +74,16 @@ EXAMPLES
 ///
 ///
 pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
-    let listen: Option<IpAddr> = args.get_one::<IpAddr>("ip").cloned();
+    let addr: Option<IpAddr> = args.get_one::<IpAddr>("ip").cloned();
     let port: Option<u16> = args.get_one::<u16>("port").cloned();
     let cert_path: Option<PathBuf> = args.get_one::<PathBuf>("cert-path").cloned();
     let key_path: Option<PathBuf> = args.get_one::<PathBuf>("key-path").cloned();
 
-    let socket_addr = parse_ipaddr(listen, port);
-
     let file_server = &FileServer {
         cert_path,
         key_path,
-        socket_addr,
+        addr,
+        port,
     };
 
     file_server::start(config, file_server);

@@ -1,3 +1,10 @@
+//!
+//!
+//!
+//!
+//!
+//!
+
 use std::{
     collections::HashMap,
     fs::{self, DirEntry},
@@ -5,17 +12,17 @@ use std::{
 };
 
 use chrono::{Duration, NaiveDate, Utc};
-use log::{info, error};
+use log::{error, info};
 use serde::Deserialize;
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
 use crate::{
+    cloud::s3::{CloudStorage, S3cmd},
     config::RustUpConfig,
     download::{download_file, download_file_with_sha},
     errors::{FreightResult, FreighterError},
 };
-
 
 #[derive(Debug, Deserialize)]
 pub struct Channel {
@@ -56,6 +63,10 @@ pub struct ChannelOptions {
     pub dist_path: PathBuf,
 
     pub bucket_name: String,
+
+    pub upload: bool,
+
+    pub delete_after_upload: bool,
 }
 
 /// entrance function
@@ -76,20 +87,18 @@ pub fn sync_rust_toolchain(opts: &ChannelOptions) -> FreightResult {
     }
     // step2: clean historical channel files if needed
     if opts.clean {
-        let channles = [
+        let channels = [
             ("beta", config.sync_beta_days),
             ("nightly", config.sync_nightly_days),
         ];
-        for channel in channles {
+        for channel in channels {
             clean_historical_version(&opts.dist_path, channel).unwrap();
         }
     }
     Ok(())
 }
 
-
-
-// sync the latest toolchain by given a channel name(stable, beta, nightly) or history verison by version number
+// sync the latest toolchain by given a channel name(stable, beta, nightly) or history version by version number
 pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
     let channel_name;
     let channel_url;
@@ -116,8 +125,27 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
                         url.split('/').map(PathBuf::from).collect::<Vec<PathBuf>>()[4..].to_owned(),
                     )
                     .collect();
+                let (upload, dist_path, bucket_name, delete_after_upload) = (
+                    opts.upload,
+                    opts.dist_path.to_owned(),
+                    opts.bucket_name.to_owned(),
+                    opts.delete_after_upload,
+                );
+                let s3cmd = S3cmd::default();
                 pool.execute(move || {
-                    download_file(&url, &path, Some(&hash), false).unwrap();
+                    let downloaded = download_file(&url, &path, Some(&hash), false);
+                    if downloaded.is_ok() && upload {
+                        let s3_path = format!(
+                            "dist{}",
+                            path.to_str()
+                                .unwrap()
+                                .replace(dist_path.to_str().unwrap(), "")
+                        );
+                        let uploaded = s3cmd.upload_file(&path, &s3_path, &bucket_name);
+                        if uploaded.is_ok() && delete_after_upload {
+                            fs::remove_file(&path).unwrap();
+                        }
+                    }
                 });
             });
             pool.join();
@@ -176,7 +204,7 @@ pub fn clean_historical_version(dist_path: &PathBuf, channels: (&str, i64)) -> F
                         info!("!!![REMOVE] \t\t {:?} !", entry.path());
                     }
                 });
-            // remvoe whole directory when it's empty
+            // remove whole directory when it's empty
             if entry.path().read_dir().unwrap().next().is_none() {
                 fs::remove_dir_all(entry.path()).unwrap();
                 info!("!!![REMOVE] \t\t {:?} !", entry.path());
@@ -204,4 +232,3 @@ pub fn compare_date(entry: &DirEntry, sync_days: i64) -> bool {
         false
     }
 }
-

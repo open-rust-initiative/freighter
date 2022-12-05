@@ -36,7 +36,7 @@ impl Download for BlockingReqwest {
         path: &Path,
         msg: &str,
     ) -> Result<bool, FreighterError> {
-        // generate parent folder if unexist
+        // generate parent folder if not exist
         if let Some(parent) = path.parent() {
             if !parent.exists() {
                 fs::create_dir_all(parent).unwrap();
@@ -71,7 +71,7 @@ pub fn download_file_with_sha(url: &str, file_folder: &Path, file_name: &str) ->
 }
 
 /// download file from remote and calculate it's hash
-/// return true if download and success, return flase if file already exists
+/// return true if download and success, return false if file already exists
 pub fn download_file(
     url: &str,
     path: &Path,
@@ -88,45 +88,21 @@ pub fn download_file(
 
         //if need to calculate hash
         if let Some(..) = check_sum {
-            if hex == check_sum.unwrap() {
+            return if hex == check_sum.unwrap() {
                 info!("###[ALREADY] \t{:?}", f);
-                return Ok(false);
+                Ok(false)
             } else {
                 warn!("!!![REMOVE] \t\t {:?} !", f);
                 fs::remove_file(path)?;
-                return br.download_to_folder(url, path, "!!![REMOVED DOWNLOAD] \t\t ");
+                br.download_to_folder(url, path, "!!![REMOVED DOWNLOAD] \t\t ")
             }
         } else if !is_override {
             info!(
-                "file exist but not pass check_sum, skiping download {}",
+                "file exist but not pass check_sum, skipping download {}",
                 path.display()
             );
             return Ok(false);
         }
     }
     br.download_to_folder(url, path, "&&&[NEW] \t\t ")
-}
-
-/// upload file to s3
-pub fn upload_file(file: &str, folder: &str, filename: &str) -> FreightResult {
-    // cargo download url is https://crates.rust-lang.pub/crates/{name}/{version}/download
-    //
-
-    // Upload to the Digital Ocean Spaces with s3cmd
-    // URL: s3://rust-lang/crates/{}/{}
-    // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public
-    // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic
-    // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic --guess-mime-type
-    // cmd: s3cmd put {file} s3://rust-lang/crates/{folder}/{file-name} --acl-public --no-mime-magic --guess-mime-type --add-header="Content-Type: application/octet-stream"
-    let status = std::process::Command::new("s3cmd")
-        .arg("put")
-        .arg(file)
-        .arg(format!("s3://rust-lang/crates/{}/{}", folder, filename))
-        .arg("--acl-public")
-        .status()
-        .expect("failed to execute process");
-    if !status.success() {
-        return Err(FreighterError::code(status.code().unwrap()));
-    }
-    Ok(())
 }

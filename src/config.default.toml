@@ -22,11 +22,8 @@ domain = "https://static.crates.io/crates"
 # Number of download threads
 download_threads = 2
 
-# when local file does not exist, redirect client to this domain
-redirect_domain = "https://rsproxy.cn"
-
 # when local file does not exist, will try to download from these doamins
-backup_domain = ["https://rsproxy.cn", "https://static.crates.io"]
+backup_domain = ["localhost", "https://rsproxy.cn", "https://static.crates.io"]
 
 [rustup]
 # download rustup from domain
@@ -37,15 +34,6 @@ download_threads = 8
 
 # stable version that you want to keep forever
 sync_stable_versions = [
-    "1.0",
-    "1.1",
-    "1.2",
-    "1.3",
-    "1.4",
-    "1.5",
-    "1.6",
-    "1.7",
-    "1.8",
     "1.9",
     "1.10",
     "1.11",
@@ -134,11 +122,7 @@ sync_nightly_days = 30
 # days you want to keep for historical beta version
 sync_beta_days = 30
 
-
-# when local file does not exist, redirect client to this domain
-redirect_domain = "https://static.rust-lang.org"
-
 # when local file does not exist, will try to download from these doamins
-backup_domain = ["https://rsproxy.cn", "https://static.rust-lang.org"]
+backup_domain = ["localhost", "https://rsproxy.cn", "https://static.rust-lang.org"]
 
 

@@ -4,16 +4,16 @@
 //! **crates** subcommand provide major functions include:
 //!
 //!   Arguments:
-//!   - __domain__: you can choose your own upstream by adding this arugment in command,
+//!   - __domain__: you can choose your own upstream by adding this argument in command,
 //!         this param can be changed in the configuration file or pass it here
 //!   - __download-threads__: specify the download threads to parallel download,
 //!         this param can be changed in the configuration file or pass it here
 //!   - __no-progressbar__: Whether to hide progress bar when start downloading
 //!
 //! # pull subcommand
-//! 
+//!
 //!   sync crates index from upstream to local:
-//! 
+//!
 //!   - The crates index is a git repository, and **cargo** clone and update from [GitHub](https://github.com/rust-lang/crates.io-index).
 //!     - The clone use `bare` mode, more details in the [cargo guide](https://github.com/rust-lang/cargo/blob/6b6b0b486d73c03ed952591d880debec1d47c534/src/doc/src/guide/cargo-home.md#directories)
 //!   
@@ -28,10 +28,12 @@
 //!         URL_s3_primary: "https://crates-io.s3-us-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
 //!         URL_s3_fallback: "https://crates-io-fallback.s3-eu-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
 //!      ```
-//! 
+//!
 //!   Arguments:
 //!   - __init__: Whether to download all the crates files for initialization.
 //!   - __upload__: Whether to upload single file to s3 after download success.
+//!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param befor uplaod.
+//!   - __delete-after-upload__: This optional parameter will be used to delete files after upload.
 //!
 //! # upload subcommand
 //!
@@ -44,11 +46,11 @@
 //!     - minio
 //!     - Ceph
 //!   Arguments:
-//!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param befor uplaod.
+//!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param before upload.
 //!  
 
 use clap::{arg, ArgMatches};
-use log::info;
+use log::{debug, info};
 
 use crate::commands::command_prelude::*;
 use crate::config::Config;
@@ -75,6 +77,8 @@ pub fn cli() -> clap::Command {
         .subcommand(subcommand("download")
             .arg(flag("init", "Start init download of crates file, this will traverse all index for full download"))
             .arg(flag("upload", "upload every crate file after download"))
+            .arg(arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files"))
+            .arg(flag("delete-after-upload", "this will delete file after upload"))
         )
         .subcommand_required(true)
         .arg_required_else_help(true)
@@ -95,7 +99,7 @@ EXAMPLES
 
        freighter -c /mnt/volume_fra1_01 crates pull
 
-2. Download all crates file and uoload:
+2. Download all crates file and unload:
 
        freighter crates download --init --upload
 
@@ -144,7 +148,13 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         Some(("download", args)) => {
             opts.upload = args.get_flag("upload");
             opts.init_download = args.get_flag("init");
-
+            opts.delete_after_upload = args.get_flag("delete-after-upload");
+            let bucket_name = args.get_one::<String>("bucket").cloned();
+            if opts.upload && bucket_name.is_none() {
+                unreachable!("can not upload with empty bucket name")
+            }
+            opts.bucket_name = bucket_name.unwrap();
+            debug!("download command opts: {:?}", opts);
             if let Some(source) = domain {
                 config.crates.domain = source;
             }

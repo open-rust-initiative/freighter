@@ -1,5 +1,10 @@
-use log::{error, info};
-use serde::Serialize;
+//!
+//!
+//!
+//!
+//!
+//!
+
 use std::{
     borrow::BorrowMut,
     convert::Infallible,
@@ -7,6 +12,9 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
 };
+
+use log::{error, info};
+use serde::Serialize;
 use tokio::{fs::File, io::AsyncWriteExt};
 use tokio_util::codec::{BytesCodec, FramedRead};
 use warp::{
@@ -18,7 +26,7 @@ use warp::{
     Filter, Rejection, Reply,
 };
 
-use crate::{config::Config, errors::FreighterError};
+use crate::{config::Config, errors::{FreighterError, FreightResult}};
 
 use super::git_protocal::{GitCommand, GitProtocal};
 
@@ -34,7 +42,8 @@ struct MissingFile {
 pub struct FileServer {
     pub cert_path: Option<PathBuf>,
     pub key_path: Option<PathBuf>,
-    pub socket_addr: SocketAddr,
+    pub addr: Option<IpAddr>,
+    pub port: Option<u16>,
 }
 
 impl Reject for MissingFile {}
@@ -46,31 +55,23 @@ pub async fn start(config: &Config, file_server: &FileServer) {
 
     let work_dir = config.work_dir.clone().unwrap();
 
-    let rustup_redirect_domain = config
-        .rustup
-        .redirect_domain
-        .clone()
-        .unwrap_or_else(|| String::from("https://static.rust-lang.org"));
-
     let rustup_backup_domain = config.rustup.backup_domain.clone().unwrap_or_else(|| {
         vec![
+            String::from("localhost"),
             String::from("https://static.rust-lang.org"),
             String::from("https://rsproxy.cn"),
         ]
     });
 
     let work_dir2 = work_dir.clone();
-    let rustup_redirect_domain2 = rustup_redirect_domain.clone();
     let rustup_backup_domain2 = rustup_backup_domain.clone();
     let dist = warp::path("dist")
         .and(warp::path::tail())
         .and_then(move |tail: warp::path::Tail| {
-            let redirect_domain = rustup_redirect_domain2.clone();
             let backup_domain = rustup_backup_domain2.clone();
             let full_path = work_dir2.join("dist").join(tail.as_str());
             async move {
-                download_local_files(
-                    redirect_domain,
+                return_files(
                     backup_domain,
                     format!("{}/{}", "dist", tail.as_str()),
                     full_path,
@@ -84,12 +85,10 @@ pub async fn start(config: &Config, file_server: &FileServer) {
     let rustup = warp::path("rustup")
         .and(warp::path::tail())
         .and_then(move |tail: warp::path::Tail| {
-            let redirect_domain = rustup_redirect_domain.clone();
             let backup_domain = rustup_backup_domain.clone();
             let full_path = work_dir3.join("rustup").join(tail.as_str());
             async move {
-                download_local_files(
-                    redirect_domain,
+                return_files(
                     backup_domain,
                     format!("{}/{}", "rustup", tail.as_str()),
                     full_path,
@@ -99,14 +98,9 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         })
         .recover(handle_missing_file);
 
-    let crates_redirect_domain = config
-        .crates
-        .redirect_domain
-        .clone()
-        .unwrap_or_else(|| String::from("https://rsproxy.cn"));
-
     let crates_backup_domain = config.crates.backup_domain.clone().unwrap_or_else(|| {
         vec![
+            String::from("localhost"),
             String::from("https://rsproxy.cn"),
             String::from("https://static.crates.io"),
         ]
@@ -114,7 +108,7 @@ pub async fn start(config: &Config, file_server: &FileServer) {
     let crates_1 = warp::path!("crates" / String / String / "download")
         .map(|name: String, version: String| {
             (
-                format!("crates/{}/{}download", &name, &version),
+                format!("crates/{}/{}/download", &name, &version),
                 name,
                 version,
             )
@@ -161,15 +155,12 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         .or(crates_2)
         .unify()
         .and_then(move |url_path: String, name: String, version: String| {
-            let redirect_domain = crates_redirect_domain.clone();
             let backup_domain = crates_backup_domain.clone();
             let full_path = work_dir
                 .join("crates")
                 .join(&name)
                 .join(format!("{}-{}.crate", name, version));
-            async move {
-                download_local_files(redirect_domain, backup_domain, url_path, full_path).await
-            }
+            async move { return_files(backup_domain, url_path, full_path).await }
         })
         .recover(handle_missing_file);
     // GET /dist/... => ./dist/..
@@ -180,14 +171,17 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         .recover(handle_rejection)
         .with(warp::trace::request());
 
-    let (cert_path, key_path, socket_addr) = (
+    let (cert_path, key_path, addr, port) = (
         &file_server.cert_path,
         &file_server.key_path,
-        file_server.socket_addr,
+        file_server.addr,
+        file_server.port,
     );
+
 
     match (cert_path, key_path) {
         (Some(cert_path), Some(key_path)) => {
+            let socket_addr = parse_ipaddr(addr, port, true);
             warp::serve(routes)
                 .tls()
                 .cert_path(cert_path)
@@ -195,7 +189,10 @@ pub async fn start(config: &Config, file_server: &FileServer) {
                 .run(socket_addr)
                 .await;
         }
-        (None, None) => warp::serve(routes).run(socket_addr).await,
+        (None, None) => {
+            let socket_addr = parse_ipaddr(addr, port, false);
+            warp::serve(routes).run(socket_addr).await
+        },
         (Some(_), None) => {
             error!("set cert_path but not set key_path.")
         }
@@ -206,33 +203,21 @@ pub async fn start(config: &Config, file_server: &FileServer) {
 }
 
 /// parse address with ip and port
-pub fn parse_ipaddr(listen: Option<IpAddr>, port: Option<u16>) -> SocketAddr {
+pub fn parse_ipaddr(listen: Option<IpAddr>, port: Option<u16>, use_ssl: bool) -> SocketAddr {
     let listen = listen.unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
-    let port = port.unwrap_or(8080);
+    let mut port = port.unwrap_or(8080);
+    if use_ssl {
+        port = 443;
+    }
     SocketAddr::new(listen, port)
 }
 
-async fn download_local_files(
-    redirect_domain: String,
-    backup_domain: Vec<String>,
-    url_path: String,
-    full_path: PathBuf,
-) -> Result<Response<Body>, Rejection> {
-    let missing_file = &MissingFile {
-        redirect_domain,
-        backup_domain,
-        url_path,
-        full_path: full_path.clone(),
-    };
-
+async fn download_local_files(full_path: &PathBuf) -> Result<Response<Body>, Rejection> {
     let file = File::open(full_path)
         .await
-        .map_err(|_| reject::custom(missing_file.to_owned()))?;
+        .map_err(|_| reject::not_found())?;
 
-    let meta = file
-        .metadata()
-        .await
-        .map_err(|_| reject::custom(missing_file.to_owned()))?;
+    let meta = file.metadata().await.map_err(|_| reject::not_found())?;
     let stream = FramedRead::new(file, BytesCodec::new());
 
     let body = Body::wrap_stream(stream);
@@ -242,6 +227,33 @@ async fn download_local_files(
         .insert(http::header::CONTENT_LENGTH, meta.len().into());
 
     Ok(resp)
+}
+
+async fn return_files(
+    backup_domain: Vec<String>,
+    url_path: String,
+    full_path: PathBuf,
+) -> Result<Response<Body>, Rejection> {
+    for domain in backup_domain {
+        if domain.eq("localhost") {
+            info!("try to fetch file from local: {}", full_path.display());
+            let res = download_local_files(&full_path).await;
+            if res.is_ok() {
+                return res;
+            }
+        } else {
+            let uri: Uri = format!("{}/{}", domain, url_path).parse().unwrap();
+            info!("try to fetch file from remote: {}", uri);
+
+            let downloaded = download_from_remote(full_path.to_owned(), &uri)
+                .await;
+            if downloaded.is_ok() {
+                let res = download_local_files(&full_path).await;
+                return res;
+            }
+        }
+    }
+    Err(reject::not_found())
 }
 
 /// An API error serializable to JSON.
@@ -278,7 +290,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
             None => "BAD_REQUEST",
         };
         code = StatusCode::BAD_REQUEST;
-    } else if err.find::<warp::reject::MethodNotAllowed>().is_some() {
+    } else if err.find::<reject::MethodNotAllowed>().is_some() {
         // We can handle a specific error, here METHOD_NOT_ALLOWED,
         // and render it however we want
         code = StatusCode::METHOD_NOT_ALLOWED;
@@ -320,7 +332,7 @@ async fn handle_missing_file(err: Rejection) -> Result<impl Reply, Rejection> {
 }
 
 /// async download file from backup domain
-async fn download_from_remote(path: PathBuf, uri: &Uri) -> Result<bool, FreighterError> {
+async fn download_from_remote(path: PathBuf, uri: &Uri) -> FreightResult {
     if let Some(parent) = path.parent() {
         if !parent.exists() {
             tokio::fs::create_dir_all(parent).await?;
@@ -328,14 +340,14 @@ async fn download_from_remote(path: PathBuf, uri: &Uri) -> Result<bool, Freighte
     }
     let mut resp = reqwest::get(uri.to_string()).await?;
     if resp.status() == 200 {
-        let mut file = tokio::fs::File::create(path).await?;
+        let mut file = File::create(path).await?;
         while let Some(mut data) = resp.chunk().await? {
             file.write_all_buf(data.borrow_mut()).await?;
         }
         info!("{} {:?}", "&&&[NEW] \t\t ", file);
     } else {
         error!("download failed, Please check your url: {}", uri);
-        return Ok(false);
+        return Err(FreighterError::code(resp.status().as_u16().into()));
     }
-    Ok(true)
+    Ok(())
 }

@@ -137,7 +137,7 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
             sync_rust_toolchain(&ChannelOptions {
                 clean: args.get_flag("clean"),
                 version: args.get_one::<String>("version").cloned(),
-                upload: upload,
+                upload,
                 delete_after_upload: args.get_flag("delete-after-upload"),
                 bucket_name: bucket_name.unwrap(),
                 ..opts

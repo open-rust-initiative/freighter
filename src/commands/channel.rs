@@ -108,6 +108,8 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         .as_ref()
         .expect("something bad happened because work_dir is none");
 
+    crate::cli::init_log(&config.log, work_dir.to_path_buf(), "channel").unwrap();
+
     let mut opts = ChannelOptions {
         config: config.rustup.to_owned(),
         dist_path: work_dir.join("dist"),

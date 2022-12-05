@@ -4,7 +4,7 @@
 //!
 //!
 //!
-
+#![feature(async_fn_in_trait)]
 mod cli;
 mod config;
 mod errors;

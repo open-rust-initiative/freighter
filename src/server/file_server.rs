@@ -28,6 +28,8 @@ use warp::{
 
 use crate::{config::Config, errors::{FreighterError, FreightResult}};
 
+use super::git_protocal::{GitCommand, GitProtocal};
+
 #[derive(Debug, PartialEq, Clone)]
 struct MissingFile {
     redirect_domain: String,
@@ -49,6 +51,8 @@ impl Reject for MissingFile {}
 /// start server
 #[tokio::main]
 pub async fn start(config: &Config, file_server: &FileServer) {
+    tracing_subscriber::fmt::init();
+
     let work_dir = config.work_dir.clone().unwrap();
 
     let rustup_backup_domain = config.rustup.backup_domain.clone().unwrap_or_else(|| {
@@ -118,6 +122,35 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         })
         .untuple_one();
 
+    let work_dir4 = work_dir.clone();
+    let git_upload_pack = warp::path!("git-upload-pack")
+        .and(warp::path::tail())
+        .and(warp::method())
+        .and(warp::body::aggregate())
+        .and(warp::header::optional::<String>("Content-Type"))
+        .and(warp::query::raw().or_else(|_| async { Ok::<(String,), Rejection>((String::new(),)) }))
+        .and_then(move |_tail, method, body, content_type, _query| {
+            let workdir = work_dir4.clone();
+            async move {
+                let git_protocal = GitCommand::default();
+                git_protocal
+                    .git_upload_pack(body, workdir, method, content_type)
+                    .await
+            }
+        });
+    let work_dir5 = work_dir.clone();
+    let git_info_refs = warp::path!("info" / "refs")
+        .and(warp::body::aggregate())
+        .and_then(move |body| {
+            let workdir = work_dir5.clone();
+            async move {
+                let git_protocal = GitCommand::default();
+                git_protocal.git_info_refs(body, workdir).await
+            }
+        });
+
+    let git = warp::path("crates.io-index").and(git_upload_pack.or(git_info_refs));
+
     let crates_route = crates_1
         .or(crates_2)
         .unify()
@@ -131,7 +164,12 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         })
         .recover(handle_missing_file);
     // GET /dist/... => ./dist/..
-    let routes = dist.or(rustup).or(crates_route).recover(handle_rejection);
+    let routes = dist
+        .or(rustup)
+        .or(crates_route)
+        .or(git)
+        .recover(handle_rejection)
+        .with(warp::trace::request());
 
     let (cert_path, key_path, addr, port) = (
         &file_server.cert_path,

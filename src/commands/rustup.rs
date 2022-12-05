@@ -8,13 +8,13 @@
 //!   - __domain__: you can choose your own upstream by adding this argument in command
 //!   - __download-threads__: specify the download threads to parallel download, 
 //!        this param can be changed in the configuration file or pass it here
-//! 
+//!
 //! # download subcommand
 //!   - sync rustup init from upstream to local
 //!   - download subcommand will fetch only the latest version of init file, and this can't be changed by config.
 //!   - before each download, freighter will try to fetch the sha256 of the file and compare with local file if it exists
 //!         and will skip downloading if they are matching.
-//! 
+//!
 //! # upload subcommand
 //!   upload file to Object Storage Service compatible with [AWS S3](https://aws.amazon.com/s3/)
 //!     - Digitalocean Spaces
@@ -24,7 +24,7 @@
 //!     - AWS S3
 //!     - minio
 //!     - Ceph
-//! 
+//!
 //!   Arguments:
 //!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param before upload.
 //!   
@@ -32,7 +32,7 @@
 use clap::{arg, ArgMatches};
 use log::info;
 
-use crate::cloud::s3::{S3cmd, CloudStorage};
+use crate::cloud::s3::{CloudStorage, S3cmd};
 use crate::commands::command_prelude::*;
 use crate::config::Config;
 use crate::crates::rustup::{sync_rustup_init, RustUpOptions};
@@ -86,6 +86,8 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         .as_ref()
         .expect("something bad happened because work_dir is none");
 
+    crate::cli::init_log(&config.log, work_dir.to_path_buf(), "rustup").unwrap();
+
     let mut opts = RustUpOptions {
         config: config.rustup.to_owned(),
         rustup_path: work_dir.join("rustup"),
@@ -106,7 +108,9 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         Some(("upload", args)) => {
             let bucket_name = args.get_one::<String>("bucket").cloned().unwrap();
             let s3cmd = S3cmd::default();
-            s3cmd.upload_folder(opts.rustup_path.to_str().unwrap(), &bucket_name).unwrap();
+            s3cmd
+                .upload_folder(opts.rustup_path.to_str().unwrap(), &bucket_name)
+                .unwrap();
         }
         Some((cmd, _)) => {
             unreachable!("unexpected command {}", cmd)

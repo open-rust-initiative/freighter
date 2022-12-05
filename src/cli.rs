@@ -53,8 +53,6 @@ pub fn main(config: &mut Config) -> FreightResult {
     };
     let mut config = config.load(&root);
 
-    init_log(&config.log, root).unwrap();
-
     let (cmd, subcommand_args) = match args.subcommand() {
         Some((cmd, args)) => (cmd, args),
         _ => {
@@ -109,9 +107,9 @@ pub fn execute_subcommand(config: &mut Config, cmd: &str, args: &ArgMatches) -> 
     }
 }
 /// read values(log format encoder, log limit and level) from config file
-/// and then initialize config for log4rs, log will preserve in /root/freighter/log by default
-pub fn init_log(config: &LogConfig, root: PathBuf) -> FreightResult {
-    let binding = root.join("freighter/log/info.log");
+/// and then initialize config for log4rs, log will preserve in /work_dir/log by default
+pub fn init_log(config: &LogConfig, work_dir: PathBuf, sub_command: &str) -> FreightResult {
+    let binding = work_dir.join(format!("log/{}.log", sub_command));
     let log_path = binding.to_str().unwrap();
     let level = LevelFilter::from_str(&config.level).unwrap();
 

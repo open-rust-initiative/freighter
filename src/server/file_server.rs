@@ -69,12 +69,15 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         .and(warp::path::tail())
         .and_then(move |tail: warp::path::Tail| {
             let backup_domain = rustup_backup_domain2.clone();
-            let full_path = work_dir2.join("dist").join(tail.as_str());
+            // let full_path = join("dist").join(tail.as_str());
+            let work_dir2 = work_dir2.clone(); 
             async move {
                 return_files(
                     backup_domain,
                     format!("{}/{}", "dist", tail.as_str()),
-                    full_path,
+                    work_dir2,
+                    PathBuf::from("dist").join(tail.as_str()),
+                    false,
                 )
                 .await
             }
@@ -86,12 +89,15 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         .and(warp::path::tail())
         .and_then(move |tail: warp::path::Tail| {
             let backup_domain = rustup_backup_domain.clone();
-            let full_path = work_dir3.join("rustup").join(tail.as_str());
+            // let full_path = work_dir3.join("rustup").join(tail.as_str());
+            let work_dir3 = work_dir3.clone();
             async move {
                 return_files(
                     backup_domain,
                     format!("{}/{}", "rustup", tail.as_str()),
-                    full_path,
+                    work_dir3,
+                    PathBuf::from("rustup").join(tail.as_str()),
+                    false,
                 )
                 .await
             }
@@ -100,6 +106,7 @@ pub async fn start(config: &Config, file_server: &FileServer) {
 
     let crates_backup_domain = config.crates.backup_domain.clone().unwrap_or_else(|| {
         vec![
+            String::from("https://crates.rust-lang.pub"),
             String::from("localhost"),
             String::from("https://rsproxy.cn"),
             String::from("https://static.crates.io"),
@@ -130,11 +137,11 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         .and(warp::header::optional::<String>("Content-Type"))
         .and(warp::query::raw().or_else(|_| async { Ok::<(String,), Rejection>((String::new(),)) }))
         .and_then(move |_tail, method, body, content_type, _query| {
-            let workdir = work_dir4.clone();
+            let work_dir4 = work_dir4.clone();
             async move {
                 let git_protocal = GitCommand::default();
                 git_protocal
-                    .git_upload_pack(body, workdir, method, content_type)
+                    .git_upload_pack(body, work_dir4, method, content_type)
                     .await
             }
         });
@@ -156,11 +163,12 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         .unify()
         .and_then(move |url_path: String, name: String, version: String| {
             let backup_domain = crates_backup_domain.clone();
-            let full_path = work_dir
-                .join("crates")
+            let work_dir2 = work_dir.clone();
+            let file_path = 
+                PathBuf::from("crates")
                 .join(&name)
                 .join(format!("{}-{}.crate", name, version));
-            async move { return_files(backup_domain, url_path, full_path).await }
+            async move { return_files(backup_domain, url_path, work_dir2, file_path, true).await }
         })
         .recover(handle_missing_file);
     // GET /dist/... => ./dist/..
@@ -232,8 +240,11 @@ async fn download_local_files(full_path: &PathBuf) -> Result<Response<Body>, Rej
 async fn return_files(
     backup_domain: Vec<String>,
     url_path: String,
-    full_path: PathBuf,
+    work_dir: PathBuf,
+    file_path: PathBuf,
+    is_crates: bool,
 ) -> Result<Response<Body>, Rejection> {
+    let full_path = work_dir.join(file_path.clone());
     for domain in backup_domain {
         if domain.eq("localhost") {
             info!("try to fetch file from local: {}", full_path.display());
@@ -242,7 +253,10 @@ async fn return_files(
                 return res;
             }
         } else {
-            let uri: Uri = format!("{}/{}", domain, url_path).parse().unwrap();
+            let mut uri: Uri = format!("{}/{}", domain, url_path).parse().unwrap();
+            if is_crates {
+                uri = format!("{}/{}", domain, file_path.display()).parse().unwrap();
+            }
             info!("try to fetch file from remote: {}", uri);
 
             let downloaded = download_from_remote(full_path.to_owned(), &uri)

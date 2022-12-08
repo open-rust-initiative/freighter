@@ -26,17 +26,18 @@ use warp::{
     Filter, Rejection, Reply,
 };
 
-use crate::{config::Config, errors::{FreighterError, FreightResult}};
+use crate::{
+    config::Config,
+    errors::{FreightResult, FreighterError},
+};
 
 use super::git_protocal::{GitCommand, GitProtocal};
 
 #[derive(Debug, PartialEq, Clone)]
 struct MissingFile {
-    redirect_domain: String,
-    backup_domain: Vec<String>,
-    url_path: String,
-    full_path: PathBuf,
+    pub uri: Uri,
 }
+impl Reject for MissingFile {}
 
 #[derive(Debug)]
 pub struct FileServer {
@@ -46,14 +47,13 @@ pub struct FileServer {
     pub port: Option<u16>,
 }
 
-impl Reject for MissingFile {}
-
 /// start server
 #[tokio::main]
 pub async fn start(config: &Config, file_server: &FileServer) {
     tracing_subscriber::fmt::init();
 
     let work_dir = config.work_dir.clone().unwrap();
+    let serve_index = config.crates.serve_index.clone();
 
     let rustup_backup_domain = config.rustup.backup_domain.clone().unwrap_or_else(|| {
         vec![
@@ -69,8 +69,7 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         .and(warp::path::tail())
         .and_then(move |tail: warp::path::Tail| {
             let backup_domain = rustup_backup_domain2.clone();
-            // let full_path = join("dist").join(tail.as_str());
-            let work_dir2 = work_dir2.clone(); 
+            let work_dir2 = work_dir2.clone();
             async move {
                 return_files(
                     backup_domain,
@@ -89,7 +88,6 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         .and(warp::path::tail())
         .and_then(move |tail: warp::path::Tail| {
             let backup_domain = rustup_backup_domain.clone();
-            // let full_path = work_dir3.join("rustup").join(tail.as_str());
             let work_dir3 = work_dir3.clone();
             async move {
                 return_files(
@@ -129,7 +127,10 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         })
         .untuple_one();
 
-    let work_dir4 = work_dir.clone();
+    let mut work_dir4 = work_dir.clone();
+    if let Some(path) = serve_index.clone() {
+        work_dir4 = path.into();
+    }
     let git_upload_pack = warp::path!("git-upload-pack")
         .and(warp::path::tail())
         .and(warp::method())
@@ -145,7 +146,10 @@ pub async fn start(config: &Config, file_server: &FileServer) {
                     .await
             }
         });
-    let work_dir5 = work_dir.clone();
+    let mut work_dir5 = work_dir.clone();
+    if let Some(path) = serve_index {
+        work_dir5 = path.into();
+    }
     let git_info_refs = warp::path!("info" / "refs")
         .and(warp::body::aggregate())
         .and_then(move |body| {
@@ -164,8 +168,7 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         .and_then(move |url_path: String, name: String, version: String| {
             let backup_domain = crates_backup_domain.clone();
             let work_dir2 = work_dir.clone();
-            let file_path = 
-                PathBuf::from("crates")
+            let file_path = PathBuf::from("crates")
                 .join(&name)
                 .join(format!("{}-{}.crate", name, version));
             async move { return_files(backup_domain, url_path, work_dir2, file_path, true).await }
@@ -186,7 +189,6 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         file_server.port,
     );
 
-
     match (cert_path, key_path) {
         (Some(cert_path), Some(key_path)) => {
             let socket_addr = parse_ipaddr(addr, port, true);
@@ -200,7 +202,7 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         (None, None) => {
             let socket_addr = parse_ipaddr(addr, port, false);
             warp::serve(routes).run(socket_addr).await
-        },
+        }
         (Some(_), None) => {
             error!("set cert_path but not set key_path.")
         }
@@ -243,7 +245,7 @@ async fn return_files(
     work_dir: PathBuf,
     file_path: PathBuf,
     is_crates: bool,
-) -> Result<Response<Body>, Rejection> {
+) -> Result<impl Reply, Rejection> {
     let full_path = work_dir.join(file_path.clone());
     for domain in backup_domain {
         if domain.eq("localhost") {
@@ -255,15 +257,15 @@ async fn return_files(
         } else {
             let mut uri: Uri = format!("{}/{}", domain, url_path).parse().unwrap();
             if is_crates {
-                uri = format!("{}/{}", domain, file_path.display()).parse().unwrap();
+                uri = format!("{}/{}", domain, file_path.display())
+                    .parse()
+                    .unwrap();
             }
             info!("try to fetch file from remote: {}", uri);
 
-            let downloaded = download_from_remote(full_path.to_owned(), &uri)
-                .await;
-            if downloaded.is_ok() {
-                let res = download_local_files(&full_path).await;
-                return res;
+            let resp = reqwest::get(uri.to_string()).await.unwrap();
+            if resp.status() == 200 {
+                return Err(reject::custom(MissingFile { uri }));
             }
         }
     }
@@ -326,20 +328,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
 
 async fn handle_missing_file(err: Rejection) -> Result<impl Reply, Rejection> {
     if let Some(missing_file) = err.find::<MissingFile>() {
-        let (redirect_domain, _, url_path, full_path) = (
-            &missing_file.redirect_domain,
-            &missing_file.backup_domain,
-            &missing_file.url_path,
-            &missing_file.full_path,
-        );
-        info!("{:?}", &missing_file);
-        let uri: Uri = format!("{}/{}", redirect_domain, url_path).parse().unwrap();
-        info!("can't found local file, redirect to : {}", uri);
-
-        download_from_remote(full_path.to_owned(), &uri)
-            .await
-            .unwrap();
-
+        let uri = missing_file.uri.clone();
         return Ok(warp::redirect::found(uri));
     }
     Err(err)

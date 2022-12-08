@@ -23,7 +23,15 @@ domain = "https://static.crates.io/crates"
 download_threads = 2
 
 # when local file does not exist, will try to download from these doamins
-backup_domain = ["localhost", "https://rsproxy.cn", "https://static.crates.io"]
+backup_domain = [
+    "https://crates.rust-lang.pub",
+    "localhost",
+    "https://rsproxy.cn",
+    "https://static.crates.io",
+]
+
+# set up the git local path you want to serve(optional)
+serve_index = "/opt/rust/"
 
 [rustup]
 # download rustup from domain
@@ -123,6 +131,8 @@ sync_nightly_days = 30
 sync_beta_days = 30
 
 # when local file does not exist, will try to download from these doamins
-backup_domain = ["localhost", "https://rsproxy.cn", "https://static.rust-lang.org"]
-
-
+backup_domain = [
+    "localhost",
+    "https://rsproxy.cn",
+    "https://static.rust-lang.org",
+]

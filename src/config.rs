@@ -33,6 +33,7 @@ pub struct CratesConfig {
     pub domain: String,
     pub download_threads: usize,
     pub backup_domain: Option<Vec<String>>,
+    pub serve_index: Option<String>,
 }
 
 /// config for rustup mirror sync

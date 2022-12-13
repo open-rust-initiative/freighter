@@ -40,6 +40,19 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 bytes = "1.1.0"
 
+rust-crypto = "0.2.36"
+hex = "0.4.3"
+deflate = "1.0.0"
+flate2 = "1.0.22"
+bstr = "1.0.1"
+spdlog-rs = "0.2.4"
+byteorder = "1.4.3"
+sha-1 = "0.10.1"
+imara-diff = "0.1.5"
+min-max = "0.1"
+colored="1.7.1"
+crc = "3.0.0"
+diffs ="0.4.1"
 
 [dev-dependencies]
 

@@ -31,7 +31,7 @@ use crate::{
     errors::{FreightResult, FreighterError},
 };
 
-use super::git_protocal::{GitCommand, GitProtocal};
+use super::git_protocal::{GitCommand, GitProtocal, PackDecoder};
 
 #[derive(Debug, PartialEq, Clone)]
 struct MissingFile {
@@ -140,7 +140,8 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         .and_then(move |_tail, method, body, content_type, _query| {
             let work_dir4 = work_dir4.clone();
             async move {
-                let git_protocal = GitCommand::default();
+                // let git_protocal = GitCommand::default();
+                let git_protocal = PackDecoder::default();
                 git_protocal
                     .git_upload_pack(body, work_dir4, method, content_type)
                     .await
@@ -155,6 +156,7 @@ pub async fn start(config: &Config, file_server: &FileServer) {
         .and_then(move |body| {
             let workdir = work_dir5.clone();
             async move {
+                info!("{:?}", workdir);
                 let git_protocal = GitCommand::default();
                 git_protocal.git_info_refs(body, workdir).await
             }
@@ -335,6 +337,7 @@ async fn handle_missing_file(err: Rejection) -> Result<impl Reply, Rejection> {
 }
 
 /// async download file from backup domain
+#[allow(unused)]
 async fn download_from_remote(path: PathBuf, uri: &Uri) -> FreightResult {
     if let Some(parent) = path.parent() {
         if !parent.exists() {

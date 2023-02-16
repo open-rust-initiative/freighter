@@ -95,7 +95,7 @@ pub fn download_file(
                 warn!("!!![REMOVE] \t\t {:?} !", f);
                 fs::remove_file(path)?;
                 br.download_to_folder(url, path, "!!![REMOVED DOWNLOAD] \t\t ")
-            }
+            };
         } else if !is_override {
             info!(
                 "file exist but not pass check_sum, skipping download {}",

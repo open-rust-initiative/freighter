@@ -101,11 +101,11 @@ EXAMPLES
 
 2. Download all crates file and unload:
 
-       freighter crates download --init --upload
+       freighter crates download --init --upload --bucket crates
 
 3. Download crates file with multi-thread to specify directory:
 
-       freighter -c /mnt/volume_fra1_01 crates -t 512 download --init
+       freighter -c /mnt/volume_fra1_01 crates -t 32 download --init
 
 \n")
 }
@@ -150,10 +150,13 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
             opts.init_download = args.get_flag("init");
             opts.delete_after_upload = args.get_flag("delete-after-upload");
             let bucket_name = args.get_one::<String>("bucket").cloned();
-            if opts.upload && bucket_name.is_none() {
-                unreachable!("can not upload with empty bucket name")
+            if opts.upload {
+                if bucket_name.is_none() {
+                    unreachable!("can not upload with empty bucket name")
+                } else {
+                    opts.bucket_name = bucket_name.unwrap();
+                }
             }
-            opts.bucket_name = bucket_name.unwrap();
             debug!("download command opts: {:?}", opts);
             if let Some(source) = domain {
                 config.crates.domain = source;

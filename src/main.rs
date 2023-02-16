@@ -6,12 +6,12 @@
 //!
 #![feature(async_fn_in_trait)]
 mod cli;
-mod config;
-mod errors;
-mod commands;
-mod crates;
 mod cloud;
+mod commands;
+mod config;
+mod crates;
 mod download;
+mod errors;
 mod server;
 
 ///
@@ -22,5 +22,7 @@ fn main() {
 
     let result = cli::main(&mut config);
 
-    if let Err(e) = result { e.print() }
+    if let Err(e) = result {
+        e.print()
+    }
 }

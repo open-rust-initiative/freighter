@@ -4,15 +4,15 @@
 //!
 //!
 
+use serde::{Deserialize, Serialize};
 use std::{
     fs,
     io::ErrorKind,
     path::{Path, PathBuf},
 };
-use serde::{Deserialize, Serialize};
 
 /// parse config from file
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Config {
     pub work_dir: Option<PathBuf>,
     pub crates: CratesConfig,
@@ -45,7 +45,6 @@ pub struct RustUpConfig {
     pub sync_nightly_days: i64,
     pub sync_beta_days: i64,
     pub backup_domain: Option<Vec<String>>,
-
 }
 
 ///

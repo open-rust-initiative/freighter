@@ -35,10 +35,7 @@ impl FreighterError {
     }
 
     pub fn code(code: i32) -> FreighterError {
-        FreighterError {
-            error: None,
-            code,
-        }
+        FreighterError { error: None, code }
     }
 
     pub fn print(&self) {

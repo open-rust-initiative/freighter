@@ -44,6 +44,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
+          # platforms: linux/amd64, linux/arm64/v8
           file: ./Dockerfile
           push: true
           tags: ${{ secrets.CLOUD_REGISTRY_NAME }}/${{ secrets.CLOUD_ORGANIZATION }}/${{ inputs.image-name }}

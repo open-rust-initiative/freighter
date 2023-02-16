@@ -5,16 +5,14 @@
 //!
 //!
 
-use std::{
-    path::{PathBuf},
-};
+use std::path::PathBuf;
 
 use threadpool::ThreadPool;
 
 use crate::{
     config::RustUpConfig,
     download::{download_file, download_file_with_sha},
-    errors::{FreightResult},
+    errors::FreightResult,
 };
 
 //rustup support platforms, see https://doc.rust-lang.org/beta/rustc/platform-support.html

@@ -10,10 +10,10 @@ use crate::cli::App;
 use crate::config::Config;
 use crate::errors::FreightResult;
 
-pub mod crates;
-pub mod rustup;
 pub mod channel;
 pub mod command_prelude;
+pub mod crates;
+pub mod rustup;
 pub mod server;
 
 /// The builtin function is the entry point of commands mod. Each subcommand is a
@@ -25,12 +25,7 @@ pub mod server;
 /// point and the `exec` function is logic entry.
 ///
 pub fn builtin() -> Vec<App> {
-    vec![
-        crates::cli(),
-        rustup::cli(),
-        channel::cli(),
-        server::cli(),
-    ]
+    vec![crates::cli(), rustup::cli(), channel::cli(), server::cli()]
 }
 
 ///

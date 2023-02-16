@@ -38,7 +38,6 @@ pub trait GitProtocal {
 #[derive(Default)]
 pub struct GitCommand {}
 
-
 /// ### References Codes
 ///
 /// - [conduit-git-http-backend][https://github.com/conduit-rust/conduit-git-http-backend/blob/master/src/lib.rs].

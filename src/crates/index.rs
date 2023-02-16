@@ -5,7 +5,6 @@
 /// - [git2-rs](https://github.com/rust-lang/git2-rs)'s clone (example)[https://github.com/rust-lang/git2-rs/blob/master/examples/clone.rs].
 /// - [crates.io](https://github.com/rust-lang/crates.io)'s [structs](https://github.com/rust-lang/crates.io/blob/master/cargo-registry-index/lib.rs)
 ///
-
 use chrono::Utc;
 use git2::build::{CheckoutBuilder, RepoBuilder};
 use git2::{
@@ -531,7 +530,8 @@ mod tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("data/tests/fixtures/");
 
-        let index = super::CrateIndex::new("https://github.com/rust-lang/crates.io-index.git", path);
+        let index =
+            super::CrateIndex::new("https://github.com/rust-lang/crates.io-index.git", path);
         // index.git_clone(&mut CratesOptions::default()).unwrap();
     }
 
@@ -540,6 +540,7 @@ mod tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("data/tests/fixtures/");
 
-        let index = super::CrateIndex::new("https://github.com/rust-lang/crates.io-index.git", path);
+        let index =
+            super::CrateIndex::new("https://github.com/rust-lang/crates.io-index.git", path);
     }
 }

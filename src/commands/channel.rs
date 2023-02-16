@@ -6,7 +6,7 @@
 //!
 //!   Arguments:
 //!   - __domain__: you can choose your own upstream by adding this argument in command
-//!   - __download-threads__: specify the download threads to parallel download, 
+//!   - __download-threads__: specify the download threads to parallel download,
 //!        this param can be changed in the configuration file or pass it here
 //!   - __no-progressbar__: not implemented
 //!
@@ -130,8 +130,13 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         Some(("download", args)) => {
             let bucket_name = args.get_one::<String>("bucket").cloned();
             let upload = args.get_flag("upload");
-            if upload && bucket_name.is_none() {
-                unreachable!("can not upload with empty bucket name")
+
+            if opts.upload {
+                if bucket_name.is_none() {
+                    unreachable!("can not upload with empty bucket name")
+                } else {
+                    opts.bucket_name = bucket_name.unwrap();
+                }
             }
 
             sync_rust_toolchain(&ChannelOptions {
@@ -139,10 +144,9 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
                 version: args.get_one::<String>("version").cloned(),
                 upload,
                 delete_after_upload: args.get_flag("delete-after-upload"),
-                bucket_name: bucket_name.unwrap(),
                 ..opts
             })?
-        },
+        }
         Some(("upload", args)) => {
             let bucket_name = args.get_one::<String>("bucket").cloned().unwrap();
             let s3cmd = S3cmd::default();

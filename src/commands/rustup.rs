@@ -6,7 +6,7 @@
 //!
 //!   Arguments:
 //!   - __domain__: you can choose your own upstream by adding this argument in command
-//!   - __download-threads__: specify the download threads to parallel download, 
+//!   - __download-threads__: specify the download threads to parallel download,
 //!        this param can be changed in the configuration file or pass it here
 //!
 //! # download subcommand

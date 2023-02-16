@@ -54,7 +54,7 @@ jobs:
           command: test
 
   build:
-    uses: open-rust-initiative/freighter/.github/workflows/do-common-build.yml@main
+    uses: open-rust-initiative/freighter/.github/workflows/cloud-common-build.yml@main
     with:
       image-name: freighter:latest
     secrets: inherit

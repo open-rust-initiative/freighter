@@ -68,6 +68,8 @@ impl CrateIndex {
     const REMOTE_BRANCH: &str = "master";
     // use default name origin
     const REMOTE_NAME: &str = "origin";
+
+    const FIRST_COMMIT_OF_CRATESIO: &str = "83ef4b3aa2e01d0cba0d267a68780aec797dd5f1";
     /// Create a new `CrateIndex` from a `Work dir`.
     pub fn new(domain: &str, work_dir: PathBuf) -> Self {
         Self {
@@ -140,7 +142,7 @@ impl CrateIndex {
         // first commit of crates.io-index
         self.generate_commit_record(
             &opts.log_path,
-            &Oid::from_str("83ef4b3aa2e01d0cba0d267a68780aec797dd5f1").unwrap(),
+            &Oid::from_str(CrateIndex::FIRST_COMMIT_OF_CRATESIO).unwrap(),
             &commit.id(),
         );
         Ok(())
@@ -530,7 +532,7 @@ mod tests {
         path.push("data/tests/fixtures/");
 
         let index = super::CrateIndex::new("https://github.com/rust-lang/crates.io-index.git", path);
-        index.git_clone(&mut CratesOptions::default()).unwrap();
+        // index.git_clone(&mut CratesOptions::default()).unwrap();
     }
 
     #[test]

@@ -21,9 +21,9 @@ use serde::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::cloud::s3::{CloudStorage, S3cmd};
-use crate::config::CratesConfig;
+use crate::config::{CratesConfig, ProxyConfig};
 use crate::crates::index;
-use crate::download::download_file;
+use crate::download::{download_and_check_hash, DownloadOptions};
 use crate::errors::FreightResult;
 
 use super::index::CrateIndex;
@@ -32,6 +32,8 @@ use super::index::CrateIndex;
 #[derive(Clone, Default, Debug)]
 pub struct CratesOptions {
     pub config: CratesConfig,
+
+    pub proxy: ProxyConfig,
 
     pub index: CrateIndex,
 
@@ -247,26 +249,33 @@ pub fn parse_index_and_download(
 }
 
 pub fn download_crates_with_log(
-    file: PathBuf,
+    path: PathBuf,
     opts: &CratesOptions,
     url: String,
     c: Crate,
     err_record: Arc<Mutex<File>>,
 ) {
-    match download_file(&url, &file, Some(&c.cksum), false) {
+    let down_opts = &DownloadOptions {
+        proxy: opts.proxy.clone(),
+        url: url.to_owned(),
+        path,
+    };
+
+    match download_and_check_hash(down_opts, Some(&c.cksum), false) {
         Ok(download_succ) => {
+            let path = &down_opts.path;
             if download_succ && opts.upload {
                 let s3 = S3cmd::default();
                 let s3_path = format!(
                     "crates{}",
-                    file.to_str()
+                    path.to_str()
                         .unwrap()
                         .replace(opts.crates_path.to_str().unwrap(), "")
                 );
                 info!("s3_path: {}, {}", s3_path, opts.delete_after_upload);
-                let uploded = s3.upload_file(&file, &s3_path, &opts.bucket_name);
+                let uploded = s3.upload_file(&path, &s3_path, &opts.bucket_name);
                 if uploded.is_ok() && opts.delete_after_upload {
-                    fs::remove_file(file).unwrap();
+                    fs::remove_file(path).unwrap();
                 }
             }
         }

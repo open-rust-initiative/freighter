@@ -19,8 +19,8 @@ index_domain = "https://github.com/rust-lang/crates.io-index.git"
 # download crates from domain
 domain = "https://static.crates.io/crates"
 
-# Number of download threads
-download_threads = 2
+# Number of crates download threads
+download_threads = 8
 
 # when local file does not exist, will try to download from these doamins
 backup_domain = [
@@ -30,14 +30,14 @@ backup_domain = [
     "https://static.crates.io",
 ]
 
-# set up the git local path you want to serve(optional)
+# set up a git local path you want to serve(optional)
 serve_index = "/opt/rust/"
 
 [rustup]
 # download rustup from domain
 domain = "https://static.rust-lang.org"
 
-# Number of download threads
+# Number of rust toolchain download threads
 download_threads = 8
 
 # stable version that you want to keep forever
@@ -122,6 +122,10 @@ sync_stable_versions = [
     "1.63",
     "1.64",
     "1.65",
+    "1.66",
+    "1.66.1",
+    "1.67",
+    "1.67.1",
 ]
 
 # days you want to keep for historical nightly version
@@ -130,9 +134,21 @@ sync_nightly_days = 30
 # days you want to keep for historical beta version
 sync_beta_days = 30
 
-# when local file does not exist, will try to download from these doamins
+# when local file does not exist, freighter will try to download from these doamins
+# localhost means read from filesystem
 backup_domain = [
     "localhost",
     "https://rsproxy.cn",
     "https://static.rust-lang.org",
 ]
+
+
+[proxy]
+# use true flag to enable proxy
+enable = false
+
+# used for git index proxy
+git_index_proxy = "http://127.0.0.1:6780"
+
+# used for crates and toolchian download proxy
+download_proxy = "http://127.0.0.1:6780"

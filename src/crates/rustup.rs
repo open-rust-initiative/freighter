@@ -10,8 +10,9 @@ use std::path::PathBuf;
 use threadpool::ThreadPool;
 
 use crate::{
+    config::ProxyConfig,
     config::RustUpConfig,
-    download::{download_file, download_file_with_sha},
+    download::{download_and_check_hash, download_file_with_sha, DownloadOptions},
     errors::FreightResult,
 };
 
@@ -51,6 +52,8 @@ const PLATFORMS: &[&str] = &[
 pub struct RustUpOptions {
     pub config: RustUpConfig,
 
+    pub proxy: ProxyConfig,
+
     pub rustup_path: PathBuf,
 }
 
@@ -58,7 +61,13 @@ pub struct RustUpOptions {
 pub fn sync_rustup_init(opts: &RustUpOptions) -> FreightResult {
     let download_url = format!("{}/rustup/release-stable.toml", opts.config.domain);
     let file = opts.rustup_path.join("release-stable.toml");
-    download_file(&download_url, &file, None, true).unwrap();
+    let down_opts = &DownloadOptions {
+        proxy: opts.proxy.clone(),
+        url: download_url,
+        path: file,
+    };
+
+    download_and_check_hash(down_opts, None, true).unwrap();
     let pool = ThreadPool::new(opts.config.download_threads);
     PLATFORMS.iter().for_each(|platform| {
         let rustup_path = opts.rustup_path.clone();
@@ -68,10 +77,11 @@ pub fn sync_rustup_init(opts: &RustUpOptions) -> FreightResult {
             "rustup-init".to_owned()
         };
         let domain = opts.config.domain.clone();
+        let proxy = opts.proxy.clone();
         pool.execute(move || {
             let download_url = format!("{}/rustup/dist/{}/{}", domain, platform, file_name);
             let folder = rustup_path.join("dist").join(platform);
-            download_file_with_sha(&download_url, &folder, &file_name).unwrap();
+            download_file_with_sha(&download_url, &folder, &file_name, &proxy).unwrap();
         });
     });
     pool.join();

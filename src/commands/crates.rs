@@ -123,6 +123,7 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
 
     let opts = &mut CratesOptions {
         config: config.crates.to_owned(),
+        proxy: config.proxy.to_owned(),
         index: CrateIndex::new(&config.crates.index_domain, work_dir.to_owned()),
         no_progressbar: args.get_flag("no-progressbar"),
         crates_path: work_dir.join("crates"),

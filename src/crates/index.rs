@@ -9,7 +9,7 @@ use chrono::Utc;
 use git2::build::{CheckoutBuilder, RepoBuilder};
 use git2::{
     DiffFormat, DiffLine, DiffOptions, ErrorCode, FetchOptions, Object, ObjectType, Oid, Progress,
-    RemoteCallbacks, Repository,
+    ProxyOptions, RemoteCallbacks, Repository,
 };
 
 use log::{info, warn};
@@ -373,6 +373,11 @@ fn do_fetch<'a>(
     });
 
     let mut fo = FetchOptions::new();
+    if opts.proxy.enable {
+        let mut proxy_op = ProxyOptions::new();
+        proxy_op.url(&opts.proxy.git_index_proxy);
+        fo.proxy_options(proxy_op);
+    }
 
     if !opts.no_progressbar {
         fo.remote_callbacks(cb);
@@ -382,7 +387,7 @@ fn do_fetch<'a>(
     // Perform a download and also update tips
     fo.download_tags(git2::AutotagOption::All);
     info!("Fetching {} for repo", remote.name().unwrap());
-    remote.fetch(refs, Some(&mut fo), None)?;
+    remote.fetch(refs, Some(&mut fo), None).unwrap();
 
     // If there are local objects (we got a thin pack), then tell the user
     // how many objects we saved from having to cross the network.

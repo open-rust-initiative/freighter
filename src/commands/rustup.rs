@@ -89,6 +89,7 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
     crate::cli::init_log(&config.log, work_dir.to_path_buf(), "rustup").unwrap();
 
     let mut opts = RustUpOptions {
+        proxy: config.proxy.to_owned(),
         config: config.rustup.to_owned(),
         rustup_path: work_dir.join("rustup"),
     };

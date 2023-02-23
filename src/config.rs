@@ -18,6 +18,7 @@ pub struct Config {
     pub crates: CratesConfig,
     pub rustup: RustUpConfig,
     pub log: LogConfig,
+    pub proxy: ProxyConfig,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -47,6 +48,13 @@ pub struct RustUpConfig {
     pub backup_domain: Option<Vec<String>>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct ProxyConfig {
+    pub enable: bool,
+    pub git_index_proxy: String,
+    pub download_proxy: String,
+}
+
 ///
 impl Config {
     pub fn new() -> Config {
@@ -55,6 +63,7 @@ impl Config {
             rustup: RustUpConfig::default(),
             crates: CratesConfig::default(),
             log: LogConfig::default(),
+            proxy: ProxyConfig::default(),
         }
     }
 
@@ -69,7 +78,7 @@ impl Config {
         config
     }
 
-    // read channel list from config file, if config file don't exist then it will be created from default file
+    // read from config file, config file will be created by default if not exist
     pub fn get_config(config_path: &Path) -> Config {
         let content = match fs::read_to_string(config_path) {
             Ok(content) => content,

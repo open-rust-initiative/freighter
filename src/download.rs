@@ -7,7 +7,7 @@
 
 use std::{
     fs::{self, File},
-    io,
+    io::{self, BufReader},
     path::{Path, PathBuf},
 };
 
@@ -113,18 +113,18 @@ pub fn download_and_check_hash(
     } = opts;
     if path.is_file() && path.exists() {
         let mut hasher = Sha256::new();
-        let mut f = File::open(path)?;
-        io::copy(&mut f, &mut hasher)?;
+        let mut buffer = BufReader::new(File::open(path)?);
+        io::copy(&mut buffer, &mut hasher)?;
         let result = hasher.finalize();
         let hex = format!("{:x}", result);
 
         //if need to calculate hash
         if let Some(..) = check_sum {
             return if hex == check_sum.unwrap() {
-                tracing::info!("###[ALREADY] \t{:?}", f);
+                tracing::info!("###[ALREADY] \t{:?}", buffer.get_ref());
                 Ok(false)
             } else {
-                tracing::warn!("!!![REMOVE] \t\t {:?} !", f);
+                tracing::warn!("!!![REMOVE] \t\t {:?} !", buffer.get_ref());
                 fs::remove_file(path)?;
                 br.download_to_folder("!!![REMOVED DOWNLOAD] \t\t ")
             };

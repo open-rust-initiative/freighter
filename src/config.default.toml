@@ -9,7 +9,7 @@ encoder = "{d}:{l} - {m}{n}"
 level = "info"
 
 # will delete and regenerate log file if exceeded the limit, unit is MB
-limit = 10
+limit = 100
 
 
 [crates]
@@ -24,7 +24,6 @@ download_threads = 8
 
 # when local file does not exist, will try to download from these doamins
 backup_domain = [
-    "https://crates.rust-lang.pub",
     "localhost",
     "https://rsproxy.cn",
     "https://static.crates.io",

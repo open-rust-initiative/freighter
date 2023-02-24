@@ -12,7 +12,7 @@ use std::{
 };
 
 /// parse config from file
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Config {
     pub work_dir: Option<PathBuf>,
     pub crates: CratesConfig,
@@ -21,7 +21,7 @@ pub struct Config {
     pub proxy: ProxyConfig,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct LogConfig {
     pub encoder: String,
     pub level: String,

@@ -20,10 +20,12 @@ index_domain = "https://github.com/rust-lang/crates.io-index.git"
 domain = "https://static.crates.io/crates"
 
 # Number of crates download threads
-download_threads = 8
+download_threads = 16
 
-# when local file does not exist, will try to download from these doamins
-backup_domain = [
+# A list of domains that provide service in order
+# localhost means read from filesystem
+# It is better to add s3 domain at the first line
+serve_domains = [
     "localhost",
     "https://rsproxy.cn",
     "https://static.crates.io",
@@ -133,9 +135,9 @@ sync_nightly_days = 30
 # days you want to keep for historical beta version
 sync_beta_days = 30
 
-# when local file does not exist, freighter will try to download from these doamins
+# A list of domains that provide service in order
 # localhost means read from filesystem
-backup_domain = [
+serve_domains = [
     "localhost",
     "https://rsproxy.cn",
     "https://static.rust-lang.org",

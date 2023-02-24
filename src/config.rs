@@ -33,7 +33,7 @@ pub struct CratesConfig {
     pub index_domain: String,
     pub domain: String,
     pub download_threads: usize,
-    pub backup_domain: Option<Vec<String>>,
+    pub serve_domains: Option<Vec<String>>,
     pub serve_index: Option<String>,
 }
 
@@ -45,7 +45,7 @@ pub struct RustUpConfig {
     pub sync_stable_versions: Vec<String>,
     pub sync_nightly_days: i64,
     pub sync_beta_days: i64,
-    pub backup_domain: Option<Vec<String>>,
+    pub serve_domains: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]

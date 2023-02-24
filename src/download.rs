@@ -7,7 +7,7 @@
 
 use std::{
     fs::{self, File},
-    io::{self, BufReader},
+    io::{self, BufReader, BufWriter},
     path::{Path, PathBuf},
 };
 
@@ -52,10 +52,10 @@ impl Download for BlockingReqwest {
             client_builder.build().unwrap()
         };
         let mut resp = reqwest_client.get(url).send()?;
-        if resp.status() == 200 {
-            let mut out = File::create(path).unwrap();
+        if resp.status().is_success() {
+            let mut out = BufWriter::new(File::create(path).unwrap());
             io::copy(&mut resp, &mut out).unwrap();
-            tracing::info!("{} {:?}", prefix_msg, out);
+            tracing::info!("{} {:?}", prefix_msg, out.get_ref());
         } else {
             tracing::error!("download failed, Please check your url: {}", url);
             return Ok(false);

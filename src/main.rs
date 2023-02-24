@@ -4,7 +4,6 @@
 //!
 //!
 //!
-#![feature(async_fn_in_trait)]
 mod cli;
 mod cloud;
 mod commands;

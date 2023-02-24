@@ -15,26 +15,6 @@ use warp::{
 
 use crate::errors::FreighterError;
 
-/// see https://git-scm.com/docs/gitprotocol-http
-pub trait GitProtocal {
-    /// Discovering References:
-    /// All HTTP clients MUST begin either a fetch or a push exchange by discovering the references available on the remote repository.
-    async fn git_info_refs(
-        &self,
-        body: impl Buf,
-        work_dir: PathBuf,
-    ) -> Result<Response<Body>, Rejection>;
-
-    /// Smart Service git-upload-pack
-    async fn git_upload_pack(
-        &self,
-        body: impl Buf,
-        work_dir: PathBuf,
-        method: http::Method,
-        content_type: Option<String>,
-    ) -> Result<Response<Body>, Rejection>;
-}
-
 #[derive(Default)]
 pub struct GitCommand {}
 
@@ -44,8 +24,8 @@ pub struct GitCommand {}
 ///
 ///
 /// hanlde request from git client
-impl GitProtocal for GitCommand {
-    async fn git_info_refs(
+impl GitCommand {
+    pub async fn git_info_refs(
         &self,
         mut body: impl Buf,
         work_dir: PathBuf,
@@ -93,7 +73,7 @@ impl GitProtocal for GitCommand {
         Ok(resp)
     }
 
-    async fn git_upload_pack(
+    pub async fn git_upload_pack(
         &self,
         mut body: impl Buf,
         work_dir: PathBuf,

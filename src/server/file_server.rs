@@ -70,10 +70,7 @@ mod filters {
 
     use warp::{Filter, Rejection};
 
-    use crate::{
-        config::Config,
-        server::git_protocal::{GitCommand, GitProtocal},
-    };
+    use crate::{config::Config, server::git_protocal::GitCommand};
 
     use super::handlers;
 
@@ -102,7 +99,7 @@ mod filters {
             .and(with_config(config.to_owned()))
             .and_then(|tail: warp::path::Tail, config: Config| async move {
                 handlers::return_files(
-                    config.rustup.backup_domain.unwrap(),
+                    config.rustup.serve_domains.unwrap(),
                     format!("{}/{}", "dist", tail.as_str()),
                     config.work_dir.unwrap(),
                     PathBuf::from("dist").join(tail.as_str()),
@@ -121,7 +118,7 @@ mod filters {
             .and(with_config(config.to_owned()))
             .and_then(move |tail: warp::path::Tail, config: Config| async move {
                 handlers::return_files(
-                    config.rustup.backup_domain.unwrap(),
+                    config.rustup.serve_domains.unwrap(),
                     format!("{}/{}", "rustup", tail.as_str()),
                     config.work_dir.unwrap(),
                     PathBuf::from("rustup").join(tail.as_str()),
@@ -162,7 +159,7 @@ mod filters {
                         .join(&name)
                         .join(format!("{}-{}.crate", name, version));
                     handlers::return_files(
-                        config.crates.backup_domain.unwrap(),
+                        config.crates.serve_domains.unwrap(),
                         url_path,
                         config.work_dir.unwrap(),
                         file_path,
@@ -206,6 +203,7 @@ mod filters {
 
         warp::path("crates.io-index").and(git_upload_pack.or(git_info_refs))
     }
+
     fn with_config(
         config: Config,
     ) -> impl Filter<Extract = (Config,), Error = std::convert::Infallible> + Clone {
@@ -220,12 +218,7 @@ mod filters {
 }
 
 mod handlers {
-    use std::{
-        borrow::BorrowMut,
-        convert::Infallible,
-        error::Error,
-        path::PathBuf,
-    };
+    use std::{borrow::BorrowMut, convert::Infallible, error::Error, path::PathBuf};
 
     use serde::Serialize;
     use tokio::{fs::File, io::AsyncWriteExt};
@@ -260,14 +253,14 @@ mod handlers {
     }
 
     pub async fn return_files(
-        backup_domain: Vec<String>,
+        serve_domains: Vec<String>,
         url_path: String,
         work_dir: PathBuf,
         file_path: PathBuf,
         is_crates: bool,
     ) -> Result<impl Reply, Rejection> {
         let full_path = work_dir.join(file_path.clone());
-        for domain in backup_domain {
+        for domain in serve_domains {
             if domain.eq("localhost") {
                 tracing::info!("try to fetch file from local: {}", full_path.display());
                 let res = download_local_files(&full_path).await;
@@ -284,7 +277,7 @@ mod handlers {
                 tracing::info!("try to fetch file from remote: {}", uri);
 
                 let resp = reqwest::get(uri.to_string()).await.unwrap();
-                if resp.status() == 200 {
+                if resp.status().is_success(){
                     return Err(reject::custom(MissingFile { uri }));
                 }
             }
@@ -354,6 +347,7 @@ mod handlers {
         Err(err)
     }
 
+    #[allow(unused)]
     /// async download file from backup domain
     pub async fn download_from_remote(path: PathBuf, uri: &Uri) -> FreightResult {
         if let Some(parent) = path.parent() {

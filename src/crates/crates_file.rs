@@ -172,10 +172,28 @@ pub fn full_downloads(opts: &CratesOptions) -> FreightResult {
 }
 
 pub fn upload_to_s3(opts: &CratesOptions) -> FreightResult {
-    let s3cmd = S3cmd::default();
-    s3cmd
-        .upload_folder(opts.crates_path.to_str().unwrap(), &opts.bucket_name)
-        .unwrap();
+    let pool = ThreadPool::new(opts.config.download_threads);
+    WalkDir::new(&opts.crates_path)
+        .min_depth(1)
+        .max_depth(1)
+        .into_iter()
+        .filter_entry(is_not_hidden)
+        .filter_map(|v| v.ok())
+        .for_each(|x| {
+            let bucket_name = opts.bucket_name.clone();
+            let s3cmd = S3cmd::default();
+            pool.execute(move || {
+                let path = x.path();
+                s3cmd
+                    .upload_folder(
+                        path.to_str().unwrap(),
+                        &format!("{}/{}", bucket_name, "crates"),
+                    )
+                    .unwrap();
+            });
+        });
+    pool.join();
+    info!("sync ends with {} task failed", pool.panic_count());
     Ok(())
 }
 

@@ -5,7 +5,7 @@
 //!
 //!
 
-use std::path::Path;
+use std::{path::Path, process::Command};
 
 use log::debug;
 
@@ -36,7 +36,7 @@ impl CloudStorage for S3cmd {
         // cmd: s3cmd put {file_path} s3://rust-lang/crates/{s3_path} --acl-public --no-mime-magic --guess-mime-type --add-header="Content-Type: application/octet-stream"
         let s3_full_path = format!("s3://{}/{}", bucket, s3_path);
         debug!("s3_full_path: {}", s3_full_path);
-        let status = std::process::Command::new("s3cmd")
+        let status = Command::new("s3cmd")
             .arg("put")
             .arg(file_path)
             .arg(s3_full_path)
@@ -50,8 +50,8 @@ impl CloudStorage for S3cmd {
     }
 
     fn upload_folder(&self, folder: &str, bucket: &str) -> FreightResult {
-        debug!("trying to upload folder {} to s3", folder);
-        let status = std::process::Command::new("s3cmd")
+        tracing::info!("trying to upload folder {} to s3: {}", folder, bucket);
+        let status = Command::new("s3cmd")
             .arg("sync")
             .arg(folder)
             .arg(format!("s3://{}/", bucket))

@@ -173,6 +173,8 @@ pub fn full_downloads(opts: &CratesOptions) -> FreightResult {
 
 pub fn upload_to_s3(opts: &CratesOptions) -> FreightResult {
     let pool = ThreadPool::new(opts.config.download_threads);
+    let s3cmd = S3cmd::default();
+
     WalkDir::new(&opts.crates_path)
         .min_depth(1)
         .max_depth(1)
@@ -181,7 +183,7 @@ pub fn upload_to_s3(opts: &CratesOptions) -> FreightResult {
         .filter_map(|v| v.ok())
         .for_each(|x| {
             let bucket_name = opts.bucket_name.clone();
-            let s3cmd = S3cmd::default();
+            let s3cmd = s3cmd.clone();
             pool.execute(move || {
                 let path = x.path();
                 s3cmd

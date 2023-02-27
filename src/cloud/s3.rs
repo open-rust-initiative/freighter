@@ -7,8 +7,6 @@
 
 use std::{path::Path, process::Command};
 
-use log::debug;
-
 use crate::errors::{FreightResult, FreighterError};
 
 /// provide a common file upload interface
@@ -20,7 +18,7 @@ pub trait CloudStorage {
     fn upload_folder(&self, folder: &str, bucket: &str) -> FreightResult;
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct S3cmd {}
 
 impl CloudStorage for S3cmd {
@@ -35,7 +33,7 @@ impl CloudStorage for S3cmd {
         // cmd: s3cmd put {file_path} s3://rust-lang/crates/{s3_path} --acl-public --no-mime-magic --guess-mime-type
         // cmd: s3cmd put {file_path} s3://rust-lang/crates/{s3_path} --acl-public --no-mime-magic --guess-mime-type --add-header="Content-Type: application/octet-stream"
         let s3_full_path = format!("s3://{}/{}", bucket, s3_path);
-        debug!("s3_full_path: {}", s3_full_path);
+        tracing::debug!("s3_full_path: {}", s3_full_path);
         let status = Command::new("s3cmd")
             .arg("put")
             .arg(file_path)
@@ -50,12 +48,13 @@ impl CloudStorage for S3cmd {
     }
 
     fn upload_folder(&self, folder: &str, bucket: &str) -> FreightResult {
-        tracing::info!("trying to upload folder {} to s3: {}", folder, bucket);
+        tracing::debug!("trying to upload folder {} to s3: {}", folder, bucket);
         let status = Command::new("s3cmd")
             .arg("sync")
             .arg(folder)
             .arg(format!("s3://{}/", bucket))
             .arg("--acl-public")
+            .arg("--no-check-md5")
             .status()
             .expect("failed to execute s3cmd sync");
         if !status.success() {

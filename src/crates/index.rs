@@ -9,7 +9,7 @@ use chrono::Utc;
 use git2::build::{CheckoutBuilder, RepoBuilder};
 use git2::{
     DiffFormat, DiffLine, DiffOptions, ErrorCode, FetchOptions, Object, ObjectType, Oid, Progress,
-    ProxyOptions, RemoteCallbacks, Repository,
+    ProxyOptions, RemoteCallbacks, Repository, Sort,
 };
 
 use log::{info, warn};
@@ -67,8 +67,6 @@ impl CrateIndex {
     const REMOTE_BRANCH: &str = "master";
     // use default name origin
     const REMOTE_NAME: &str = "origin";
-
-    const FIRST_COMMIT_OF_CRATESIO: &str = "83ef4b3aa2e01d0cba0d267a68780aec797dd5f1";
     /// Create a new `CrateIndex` from a `Work dir`.
     pub fn new(domain: &str, work_dir: PathBuf) -> Self {
         Self {
@@ -86,7 +84,7 @@ impl CrateIndex {
         let commit = object.peel_to_commit()?;
         let fetch_commit = do_fetch(&repo, &[CrateIndex::REMOTE_BRANCH], &mut remote, opts)?;
 
-        self.generate_commit_record(&opts.log_path, &commit.id(), &fetch_commit.id());
+        self.save_commit_log(&opts.log_path, &commit.id(), &fetch_commit.id());
         info!(
             "commit id:{}, remote id :{}",
             commit.id(),
@@ -137,23 +135,18 @@ impl CrateIndex {
             .clone(self.url.as_ref(), self.path.as_path())?;
 
         let object = repo.revparse_single(CrateIndex::REMOTE_BRANCH)?;
+        let mut revwalk = repo.revwalk()?;
+        revwalk.set_sorting(Sort::REVERSE)?;
+        revwalk.push(object.id())?;
         let commit = object.peel_to_commit()?;
         // first commit of crates.io-index
-        self.generate_commit_record(
-            &opts.log_path,
-            &Oid::from_str(CrateIndex::FIRST_COMMIT_OF_CRATESIO).unwrap(),
-            &commit.id(),
-        );
+        let first_commit_id: Oid = revwalk.next().unwrap().unwrap();
+        self.save_commit_log(&opts.log_path, &first_commit_id, &commit.id());
         Ok(())
     }
 
     /// save commit record in record.log, it will write from first commit to current commit if command is git clone
-    pub fn generate_commit_record(
-        &self,
-        log_path: &PathBuf,
-        start_commit_id: &Oid,
-        end_commit_id: &Oid,
-    ) {
+    pub fn save_commit_log(&self, log_path: &PathBuf, from_commit: &Oid, to_commit: &Oid) {
         let now = Utc::now();
         let mut file_name = now.date_naive().to_string();
         file_name.push('-');
@@ -170,15 +163,8 @@ impl CrateIndex {
             },
         };
         // save record commit id only id does not matches
-        if start_commit_id != end_commit_id {
-            writeln!(
-                f,
-                "{},{},{}",
-                start_commit_id,
-                end_commit_id,
-                now.timestamp()
-            )
-            .unwrap();
+        if from_commit != to_commit {
+            writeln!(f, "{},{},{}", from_commit, to_commit, now.timestamp()).unwrap();
         }
     }
 }

@@ -59,8 +59,7 @@ pub fn cli() -> clap::Command {
             .arg(flag("delete-after-upload", "this will delete file after upload"))
         )
         .subcommand(subcommand("upload")
-        .arg(
-            arg!(-b --"bucket" <VALUE> "set the s3 bucket you want to upload files to")
+            .arg(arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files")
             .required(true)
         ))
         .subcommand_required(true)
@@ -142,7 +141,7 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
             }
             sync_rust_toolchain(down_opts)?
         }
-        Some(("upload", _)) => {
+        Some(("upload", args)) => {
             let bucket_name = args.get_one::<String>("bucket").cloned().unwrap();
             let s3cmd = S3cmd::default();
             cloud::upload_with_pool(

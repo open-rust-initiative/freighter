@@ -2,10 +2,7 @@
 //!
 //!
 
-use std::{
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-};
+use std::path::{Path, PathBuf};
 
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
@@ -25,6 +22,7 @@ pub trait CloudStorage {
     fn upload_folder(&self, folder: &str, bucket: &str) -> FreightResult;
 }
 
+// this method is used to handle 'uplaod' subcommand for uplaod all files to obs server
 pub fn upload_with_pool(
     download_threads: usize,
     path: PathBuf,
@@ -33,7 +31,12 @@ pub fn upload_with_pool(
 ) -> FreightResult {
     let pool = ThreadPool::new(download_threads);
     // let cloud_storage = S3cmd::default();
-    let cloud = Arc::new(Mutex::new(cloud_storage));
+    // let cloud = Arc::new(Mutex::new(cloud_storage));
+    let bucket_name = format!(
+        "{}/{}",
+        bucket_name,
+        path.file_name().unwrap().to_str().unwrap()
+    );
     WalkDir::new(path)
         .min_depth(1)
         .max_depth(1)
@@ -42,15 +45,13 @@ pub fn upload_with_pool(
         .filter_map(|v| v.ok())
         .for_each(|x| {
             let bucket_name = bucket_name.clone();
-            let cloud = Arc::clone(&cloud);
+            let cloud_storage = cloud_storage.clone();
+            // let cloud = Arc::clone(&cloud);
             pool.execute(move || {
-                let storage = cloud.lock().unwrap();
+                // let storage = cloud.lock().unwrap();
                 let path = x.path();
-                storage
-                    .upload_folder(
-                        path.to_str().unwrap(),
-                        &format!("{}/{}", bucket_name, "crates"),
-                    )
+                cloud_storage
+                    .upload_folder(path.to_str().unwrap(), &bucket_name)
                     .unwrap();
             });
         });

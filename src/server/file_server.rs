@@ -76,7 +76,7 @@ mod filters {
 
     pub fn build_route(
         config: Config,
-    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
         let git_work_dir = if let Some(path) = &config.crates.serve_index {
             PathBuf::from(path)
         } else {
@@ -93,7 +93,7 @@ mod filters {
 
     pub fn dist(
         config: Config,
-    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
         warp::path("dist")
             .and(warp::path::tail())
             .and(with_config(config.to_owned()))
@@ -112,7 +112,7 @@ mod filters {
 
     pub fn rustup(
         config: Config,
-    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
         warp::path("rustup")
             .and(warp::path::tail())
             .and(with_config(config.to_owned()))
@@ -131,7 +131,7 @@ mod filters {
 
     pub fn crates(
         config: Config,
-    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
         let crates_1 = warp::path!("crates" / String / String / "download")
             .map(|name: String, version: String| {
                 (
@@ -173,7 +173,7 @@ mod filters {
 
     pub fn git(
         git_work_dir: PathBuf,
-    ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
         let git_upload_pack = warp::path!("git-upload-pack")
             .and(warp::path::tail())
             .and(warp::method())
@@ -277,7 +277,7 @@ mod handlers {
                 tracing::info!("try to fetch file from remote: {}", uri);
 
                 let resp = reqwest::get(uri.to_string()).await.unwrap();
-                if resp.status().is_success(){
+                if resp.status().is_success() {
                     return Err(reject::custom(MissingFile { uri }));
                 }
             }

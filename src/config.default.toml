@@ -151,5 +151,5 @@ enable = false
 # used for git index proxy
 git_index_proxy = "http://127.0.0.1:6780"
 
-# used for crates and toolchian download proxy
+# used for crates and toolchain download proxy
 download_proxy = "http://127.0.0.1:6780"

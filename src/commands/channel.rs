@@ -41,9 +41,9 @@
 //!   
 
 use clap::{arg, ArgMatches};
-use log::info;
 
-use crate::cloud::s3::{CloudStorage, S3cmd};
+use crate::cloud;
+use crate::cloud::s3::S3cmd;
 use crate::commands::command_prelude::*;
 use crate::config::Config;
 use crate::crates::channel::{sync_rust_toolchain, ChannelOptions};
@@ -125,35 +125,33 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         opts.config.download_threads = download_threads;
     };
 
-    info!("ChannelOptions info : {:#?}", opts);
+    tracing::info!("Default ChannelOptions : {:#?}", opts);
 
     match args.subcommand() {
         Some(("download", args)) => {
-            let bucket_name = args.get_one::<String>("bucket").cloned();
-            let upload = args.get_flag("upload");
-
-            if opts.upload {
-                if bucket_name.is_none() {
-                    unreachable!("can not upload with empty bucket name")
-                } else {
-                    opts.bucket_name = bucket_name.unwrap();
-                }
-            }
-
-            sync_rust_toolchain(&ChannelOptions {
+            let down_opts = &ChannelOptions {
+                upload: args.get_flag("upload"),
+                bucket: args.get_one::<String>("bucket").cloned(),
                 clean: args.get_flag("clean"),
                 version: args.get_one::<String>("version").cloned(),
-                upload,
                 delete_after_upload: args.get_flag("delete-after-upload"),
                 ..opts
-            })?
+            };
+            if down_opts.upload && down_opts.bucket.is_none() {
+                unreachable!("can not upload with empty bucket name")
+            }
+            sync_rust_toolchain(down_opts)?
         }
-        Some(("upload", args)) => {
+        Some(("upload", _)) => {
             let bucket_name = args.get_one::<String>("bucket").cloned().unwrap();
             let s3cmd = S3cmd::default();
-            s3cmd
-                .upload_folder(opts.dist_path.to_str().unwrap(), &bucket_name)
-                .unwrap();
+            cloud::upload_with_pool(
+                opts.config.download_threads,
+                opts.dist_path,
+                bucket_name,
+                s3cmd,
+            )
+            .unwrap();
         }
         Some((cmd, _)) => {
             unreachable!("unexpected command {}", cmd)

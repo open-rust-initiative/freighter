@@ -32,7 +32,8 @@
 use clap::{arg, ArgMatches};
 use log::info;
 
-use crate::cloud::s3::{CloudStorage, S3cmd};
+use crate::cloud::s3::S3cmd;
+use crate::cloud::CloudStorage;
 use crate::commands::command_prelude::*;
 use crate::config::Config;
 use crate::crates::rustup::{sync_rustup_init, RustUpOptions};

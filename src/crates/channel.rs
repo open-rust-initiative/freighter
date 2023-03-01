@@ -18,7 +18,7 @@ use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
 use crate::{
-    cloud::s3::{CloudStorage, S3cmd},
+    cloud::{s3::S3cmd, CloudStorage},
     config::{ProxyConfig, RustUpConfig},
     download::{download_and_check_hash, download_file_with_sha, DownloadOptions},
     errors::{FreightResult, FreighterError},
@@ -64,7 +64,7 @@ pub struct ChannelOptions {
 
     pub dist_path: PathBuf,
 
-    pub bucket_name: String,
+    pub bucket: Option<String>,
 
     pub upload: bool,
 
@@ -127,10 +127,10 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
                         url.split('/').map(PathBuf::from).collect::<Vec<PathBuf>>()[4..].to_owned(),
                     )
                     .collect();
-                let (upload, dist_path, bucket_name, delete_after_upload) = (
+                let (upload, dist_path, bucket, delete_after_upload) = (
                     opts.upload,
                     opts.dist_path.to_owned(),
-                    opts.bucket_name.to_owned(),
+                    opts.bucket.to_owned(),
                     opts.delete_after_upload,
                 );
                 let s3cmd = S3cmd::default();
@@ -138,15 +138,16 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
                 pool.execute(move || {
                     let down_opts = &DownloadOptions { proxy, url, path };
                     let path = &down_opts.path;
-                    let downloaded = download_and_check_hash(down_opts, Some(&hash), false);
-                    if downloaded.is_ok() && upload {
+                    let downloaded =
+                        download_and_check_hash(down_opts, Some(&hash), false).unwrap();
+                    if downloaded && upload {
                         let s3_path = format!(
                             "dist{}",
                             path.to_str()
                                 .unwrap()
                                 .replace(dist_path.to_str().unwrap(), "")
                         );
-                        let uploaded = s3cmd.upload_file(path, &s3_path, &bucket_name);
+                        let uploaded = s3cmd.upload_file(path, &s3_path, &bucket.unwrap());
                         if uploaded.is_ok() && delete_after_upload {
                             fs::remove_file(path).unwrap();
                         }

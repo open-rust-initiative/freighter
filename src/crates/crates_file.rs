@@ -20,7 +20,8 @@ use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
-use crate::cloud::s3::{CloudStorage, S3cmd};
+use crate::cloud::s3::S3cmd;
+use crate::cloud::{self, CloudStorage};
 use crate::config::{CratesConfig, ProxyConfig};
 use crate::crates::index;
 use crate::download::{download_and_check_hash, DownloadOptions};
@@ -123,10 +124,10 @@ pub fn download(opts: &mut CratesOptions) -> FreightResult {
                         .open(dir.path())
                         .unwrap()
                 } else {
-                    panic!("Cannot get record file, run freighter sync pull before download")
+                    panic!("Cannot get record file, run freighter crates pull before download")
                 }
             }
-            None => panic!("Did you forget to run freighter sync pull before download?"),
+            None => panic!("Did you forget to run freighter crates pull before download?"),
         };
         let buffered = BufReader::new(&mut input);
         info!("crates.io-index modified:");
@@ -172,30 +173,14 @@ pub fn full_downloads(opts: &CratesOptions) -> FreightResult {
 }
 
 pub fn upload_to_s3(opts: &CratesOptions) -> FreightResult {
-    let pool = ThreadPool::new(opts.config.download_threads);
     let s3cmd = S3cmd::default();
-
-    WalkDir::new(&opts.crates_path)
-        .min_depth(1)
-        .max_depth(1)
-        .into_iter()
-        .filter_entry(is_not_hidden)
-        .filter_map(|v| v.ok())
-        .for_each(|x| {
-            let bucket_name = opts.bucket_name.clone();
-            let s3cmd = s3cmd.clone();
-            pool.execute(move || {
-                let path = x.path();
-                s3cmd
-                    .upload_folder(
-                        path.to_str().unwrap(),
-                        &format!("{}/{}", bucket_name, "crates"),
-                    )
-                    .unwrap();
-            });
-        });
-    pool.join();
-    info!("sync ends with {} task failed", pool.panic_count());
+    cloud::upload_with_pool(
+        opts.config.download_threads,
+        opts.crates_path.clone(),
+        opts.bucket_name.clone(),
+        s3cmd,
+    )
+    .unwrap();
     Ok(())
 }
 
@@ -277,7 +262,7 @@ pub fn download_crates_with_log(
 ) {
     let down_opts = &DownloadOptions {
         proxy: opts.proxy.clone(),
-        url: url.to_owned(),
+        url,
         path,
     };
 
@@ -293,7 +278,7 @@ pub fn download_crates_with_log(
                         .replace(opts.crates_path.to_str().unwrap(), "")
                 );
                 info!("s3_path: {}, {}", s3_path, opts.delete_after_upload);
-                let uploded = s3.upload_file(&path, &s3_path, &opts.bucket_name);
+                let uploded = s3.upload_file(path, &s3_path, &opts.bucket_name);
                 if uploded.is_ok() && opts.delete_after_upload {
                     fs::remove_file(path).unwrap();
                 }

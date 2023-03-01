@@ -9,14 +9,7 @@ use std::{path::Path, process::Command};
 
 use crate::errors::{FreightResult, FreighterError};
 
-/// provide a common file upload interface
-pub trait CloudStorage {
-    /// upload a single file to target storage
-    fn upload_file(&self, file_path: &Path, s3_path: &str, bucket: &str) -> FreightResult;
-
-    /// this operation will upload all files in folder
-    fn upload_folder(&self, folder: &str, bucket: &str) -> FreightResult;
-}
+use super::CloudStorage;
 
 #[derive(Default, Clone)]
 pub struct S3cmd {}
@@ -54,7 +47,6 @@ impl CloudStorage for S3cmd {
             .arg(folder)
             .arg(format!("s3://{}/", bucket))
             .arg("--acl-public")
-            .arg("--no-check-md5")
             .status()
             .expect("failed to execute s3cmd sync");
         if !status.success() {

@@ -80,14 +80,13 @@ mod filters {
         let git_work_dir = if let Some(path) = &config.crates.serve_index {
             PathBuf::from(path)
         } else {
-            let work_dir = config.work_dir.clone().unwrap();
-            work_dir
+            config.work_dir.clone().unwrap()
         };
 
         // GET /dist/... => ./dist/..
         dist(config.clone())
             .or(rustup(config.clone()))
-            .or(crates(config.clone()))
+            .or(crates(config))
             .or(git(git_work_dir))
     }
 
@@ -96,7 +95,7 @@ mod filters {
     ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
         warp::path("dist")
             .and(warp::path::tail())
-            .and(with_config(config.to_owned()))
+            .and(with_config(config))
             .and_then(|tail: warp::path::Tail, config: Config| async move {
                 handlers::return_files(
                     config.rustup.serve_domains.unwrap(),
@@ -115,7 +114,7 @@ mod filters {
     ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
         warp::path("rustup")
             .and(warp::path::tail())
-            .and(with_config(config.to_owned()))
+            .and(with_config(config))
             .and_then(move |tail: warp::path::Tail, config: Config| async move {
                 handlers::return_files(
                     config.rustup.serve_domains.unwrap(),
@@ -152,7 +151,7 @@ mod filters {
         crates_1
             .or(crates_2)
             .unify()
-            .and(with_config(config.to_owned()))
+            .and(with_config(config))
             .and_then(
                 |url_path: String, name: String, version: String, config: Config| async move {
                     let file_path = PathBuf::from("crates")
@@ -195,7 +194,7 @@ mod filters {
 
         let git_info_refs = warp::path!("info" / "refs")
             .and(warp::body::aggregate())
-            .and(with_work_dir(git_work_dir.to_owned()))
+            .and(with_work_dir(git_work_dir))
             .and_then(|body, work_dir| async move {
                 let git_protocal = GitCommand::default();
                 git_protocal.git_info_refs(body, work_dir).await

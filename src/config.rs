@@ -46,6 +46,7 @@ pub struct RustUpConfig {
     pub sync_nightly_days: i64,
     pub sync_beta_days: i64,
     pub serve_domains: Option<Vec<String>>,
+    pub history_version_start_date: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]

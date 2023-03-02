@@ -41,7 +41,7 @@ impl CloudStorage for S3cmd {
     }
 
     fn upload_folder(&self, folder: &str, bucket: &str) -> FreightResult {
-        tracing::debug!("trying to upload folder {} to s3: {}", folder, bucket);
+        tracing::debug!("syncing folder... {} to s3: {}", folder, bucket);
         let status = Command::new("s3cmd")
             .arg("sync")
             .arg(folder)

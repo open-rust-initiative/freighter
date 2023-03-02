@@ -12,7 +12,7 @@ use std::{
 };
 
 use crate::config::ProxyConfig;
-use crate::errors::{FreightResult, FreighterError};
+use crate::errors::FreighterError;
 
 use sha2::{Digest, Sha256};
 
@@ -70,28 +70,30 @@ pub fn download_file_with_sha(
     file_folder: &Path,
     file_name: &str,
     proxy: &ProxyConfig,
-) -> FreightResult {
+) -> Result<bool, FreighterError> {
+    tracing::info!("down_url:{:?}", url);
     let sha_url = format!("{}{}", url, ".sha256");
     let sha_name = format!("{}{}", file_name, ".sha256");
     let sha_path = file_folder.join(sha_name);
     //always update sha256 file
-    let opts = &DownloadOptions {
+    let down_sha = &DownloadOptions {
         proxy: proxy.clone(),
         url: sha_url,
         path: sha_path,
     };
-    let res = download_and_check_hash(opts, None, true).unwrap();
+    let res = download_and_check_hash(down_sha, None, true).unwrap();
     if res {
-        let content = fs::read_to_string(&opts.path).unwrap();
+        let content = fs::read_to_string(&down_sha.path).unwrap();
         let sha256 = &content[..64];
-        let opts = &DownloadOptions {
+        let down_file = &DownloadOptions {
             proxy: proxy.clone(),
             url: url.to_owned(),
             path: file_folder.join(file_name),
         };
-        download_and_check_hash(opts, Some(sha256), false).unwrap();
+        download_and_check_hash(down_file, Some(sha256), false)
+    } else {
+        Ok(false)
     }
-    Ok(())
 }
 
 /// download file from remote and calculate it's hash

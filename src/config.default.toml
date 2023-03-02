@@ -31,7 +31,7 @@ serve_domains = [
     "https://static.crates.io",
 ]
 
-# set up a git local path you want to serve(optional)
+#(optional) set up a git local path you want to serve
 serve_index = "/opt/rust/"
 
 [rustup]
@@ -39,7 +39,7 @@ serve_index = "/opt/rust/"
 domain = "https://static.rust-lang.org"
 
 # Number of rust toolchain download threads
-download_threads = 8
+download_threads = 16
 
 # stable version that you want to keep forever
 sync_stable_versions = [
@@ -142,6 +142,9 @@ serve_domains = [
     "https://rsproxy.cn",
     "https://static.rust-lang.org",
 ]
+
+# (optional) set this value to sync historical nightly and beta version
+history_version_start_date = "2016-03-01"
 
 
 [proxy]

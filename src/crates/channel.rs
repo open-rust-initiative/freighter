@@ -12,7 +12,6 @@ use std::{
 };
 
 use chrono::{Duration, NaiveDate, Utc};
-use log::{error, info};
 use serde::Deserialize;
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
@@ -75,19 +74,39 @@ pub struct ChannelOptions {
 pub fn sync_rust_toolchain(opts: &ChannelOptions) -> FreightResult {
     let config = &opts.config;
     if let Some(version) = &opts.version {
-        // step1.1 : sync input channel version
+        // step 1 : sync specified channel version
         sync_channel(opts, version)?;
     } else {
-        // step1.2: sync latest stable,beta and nightly channel
+        // step 2.1: sync latest stable, beta and nightly channel
+        tracing::info!("step 2.1: sync latest stable, beta and nightly channel");
         sync_channel(opts, "stable")?;
         sync_channel(opts, "beta")?;
         sync_channel(opts, "nightly")?;
-        // step1.3: sync specified channel version by config file
+        // step 2.2: sync specified channel version by config file
+        tracing::info!("step 2.2: sync specified channel version by config file");
         config.sync_stable_versions.iter().for_each(|channel| {
             sync_channel(opts, channel).unwrap();
         });
+        // step 2.3: sync historical nightly and beta versions
+        if let Some(date) = config.history_version_start_date.clone() {
+            let start_date = NaiveDate::parse_from_str(&date, "%Y-%m-%d").unwrap();
+            tracing::info!(
+                "step 2.3: sync historical nightly and beta versions from {}",
+                start_date
+            );
+            let today = Utc::now().date_naive();
+            if today >= start_date {
+                let duration_days = (today - start_date).num_days().try_into().unwrap();
+                for (_, day) in start_date.iter_days().take(duration_days).enumerate() {
+                    sync_channel(opts, &format!("beta-{}", day))?;
+                    sync_channel(opts, &format!("nightly-{}", day))?;
+                }
+            } else {
+                tracing::error!("start date {} is after today {}", start_date, today);
+            }
+        }
     }
-    // step2: clean historical channel files if needed
+    // step 3: clean local historical channel files if needed
     if opts.clean {
         let channels = [
             ("beta", config.sync_beta_days),
@@ -105,8 +124,13 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
     let channel_name;
     let channel_url;
     let file_folder;
+    tracing::error!("starting download channel: {}", channel);
     if let Some(date) = channel.strip_prefix("nightly-") {
         channel_name = String::from("channel-rust-nightly.toml");
+        channel_url = format!("{}/dist/{}/{}", opts.config.domain, date, channel_name);
+        file_folder = opts.dist_path.to_owned().join(date);
+    } else if let Some(date) = channel.strip_prefix("beta-") {
+        channel_name = String::from("channel-rust-beta.toml");
         channel_url = format!("{}/dist/{}/{}", opts.config.domain, date, channel_name);
         file_folder = opts.dist_path.to_owned().join(date);
     } else {
@@ -115,10 +139,15 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
         file_folder = opts.dist_path.to_owned();
     }
     match download_file_with_sha(&channel_url, &file_folder, &channel_name, &opts.proxy) {
-        Ok(_) => {
+        Ok(res) => {
+            let channel_toml = &file_folder.join(channel_name);
+            if !res && !channel_toml.exists() {
+                tracing::error!("skipping download channel: {}", channel);
+                return Ok(());
+            }
             let pool = ThreadPool::new(opts.config.download_threads);
             // parse_channel_file and download;
-            let download_list = parse_channel_file(&file_folder.join(channel_name)).unwrap();
+            let download_list = parse_channel_file(&channel_toml).unwrap();
             download_list.into_iter().for_each(|(url, hash)| {
                 // example: https://static.rust-lang.org/dist/2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi
                 // remove url prefix "https://static.rust-lang.org/dist"
@@ -157,7 +186,7 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
             pool.join();
         }
         Err(_err) => {
-            info!("skipping download channel:{}", channel);
+            tracing::info!("skipping download channel:{}", channel);
         }
     }
     Ok(())
@@ -207,13 +236,13 @@ pub fn clean_historical_version(dist_path: &PathBuf, channels: (&str, i64)) -> F
                     let file_name = entry.file_name().to_str().unwrap();
                     if file_name.contains(channel) {
                         fs::remove_file(entry.path()).unwrap();
-                        info!("!!![REMOVE] \t\t {:?} !", entry.path());
+                        tracing::info!("!!![REMOVE] \t\t {:?} !", entry.path());
                     }
                 });
             // remove whole directory when it's empty
             if entry.path().read_dir().unwrap().next().is_none() {
                 fs::remove_dir_all(entry.path()).unwrap();
-                info!("!!![REMOVE] \t\t {:?} !", entry.path());
+                tracing::info!("!!![REMOVE] \t\t {:?} !", entry.path());
             }
         });
 
@@ -226,7 +255,7 @@ pub fn compare_date(entry: &DirEntry, sync_days: i64) -> bool {
         {
             Ok(date) => date,
             Err(_) => {
-                error!(
+                tracing::error!(
                     "can't parse dir :{} and skipping... ",
                     entry.path().display()
                 );

@@ -38,12 +38,7 @@ pub struct DownloadOptions {
 impl Download for BlockingReqwest {
     fn download_to_folder(&self, prefix_msg: &str) -> Result<bool, FreighterError> {
         let DownloadOptions { proxy, url, path } = &self.opts;
-        // generate parent folder if not exist
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent).unwrap();
-            }
-        }
+
         let client_builder = reqwest::blocking::Client::builder();
         let reqwest_client = if proxy.enable {
             let proxy = reqwest::Proxy::https(proxy.download_proxy.clone()).unwrap();
@@ -53,6 +48,12 @@ impl Download for BlockingReqwest {
         };
         let mut resp = reqwest_client.get(url).send()?;
         if resp.status().is_success() {
+            // generate parent folder if not exist
+            if let Some(parent) = path.parent() {
+                if !parent.exists() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+            }
             let mut out = BufWriter::new(File::create(path).unwrap());
             io::copy(&mut resp, &mut out).unwrap();
             tracing::info!("{} {:?}", prefix_msg, out.get_ref());
@@ -71,7 +72,6 @@ pub fn download_file_with_sha(
     file_name: &str,
     proxy: &ProxyConfig,
 ) -> Result<bool, FreighterError> {
-    tracing::info!("down_url:{:?}", url);
     let sha_url = format!("{}{}", url, ".sha256");
     let sha_name = format!("{}{}", file_name, ".sha256");
     let sha_path = file_folder.join(sha_name);

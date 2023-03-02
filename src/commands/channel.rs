@@ -55,6 +55,7 @@ pub fn cli() -> clap::Command {
             .arg(flag("clean", "clean up historical versions"))
             .arg(arg!(-v --"version" <VALUE> "only download the version you specified"))
             .arg(flag("upload", "upload every crate file after download"))
+            .arg(flag("history", "only sync history nightly and beta versions"))
             .arg(arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files"))
             .arg(flag("delete-after-upload", "this will delete file after upload"))
         )
@@ -134,6 +135,7 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
                 clean: args.get_flag("clean"),
                 version: args.get_one::<String>("version").cloned(),
                 delete_after_upload: args.get_flag("delete-after-upload"),
+                sync_history: args.get_flag("history"),
                 ..opts
             };
             if down_opts.upload && down_opts.bucket.is_none() {

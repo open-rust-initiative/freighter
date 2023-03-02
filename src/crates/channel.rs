@@ -68,6 +68,8 @@ pub struct ChannelOptions {
     pub upload: bool,
 
     pub delete_after_upload: bool,
+
+    pub sync_history: bool,
 }
 
 /// entrance function
@@ -76,22 +78,12 @@ pub fn sync_rust_toolchain(opts: &ChannelOptions) -> FreightResult {
     if let Some(version) = &opts.version {
         // step 1 : sync specified channel version
         sync_channel(opts, version)?;
-    } else {
-        // step 2.1: sync latest stable, beta and nightly channel
-        tracing::info!("step 2.1: sync latest stable, beta and nightly channel");
-        sync_channel(opts, "stable")?;
-        sync_channel(opts, "beta")?;
-        sync_channel(opts, "nightly")?;
-        // step 2.2: sync specified channel version by config file
-        tracing::info!("step 2.2: sync specified channel version by config file");
-        config.sync_stable_versions.iter().for_each(|channel| {
-            sync_channel(opts, channel).unwrap();
-        });
-        // step 2.3: sync historical nightly and beta versions
+    } else if opts.sync_history {
+        // step 2: sync historical nightly and beta versions
         if let Some(date) = config.history_version_start_date.clone() {
             let start_date = NaiveDate::parse_from_str(&date, "%Y-%m-%d").unwrap();
             tracing::info!(
-                "step 2.3: sync historical nightly and beta versions from {}",
+                "step 2: sync historical nightly and beta versions from {}",
                 start_date
             );
             let today = Utc::now().date_naive();
@@ -105,6 +97,17 @@ pub fn sync_rust_toolchain(opts: &ChannelOptions) -> FreightResult {
                 tracing::error!("start date {} is after today {}", start_date, today);
             }
         }
+    } else {
+        // step 3.1: sync latest stable, beta and nightly channel
+        tracing::info!("step 3.1: sync latest stable, beta and nightly channel");
+        sync_channel(opts, "stable")?;
+        sync_channel(opts, "beta")?;
+        sync_channel(opts, "nightly")?;
+        // step 3.2: sync specified channel version by config file
+        tracing::info!("step 3.2: sync specified channel version by config file");
+        config.sync_stable_versions.iter().for_each(|channel| {
+            sync_channel(opts, channel).unwrap();
+        });
     }
     // step 3: clean local historical channel files if needed
     if opts.clean {
@@ -142,7 +145,7 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
         Ok(res) => {
             let channel_toml = &file_folder.join(channel_name);
             if !res && !channel_toml.exists() {
-                tracing::error!("skipping download channel: {}", channel);
+                tracing::error!("skipping channel: {}", channel);
                 return Ok(());
             }
             let pool = ThreadPool::new(opts.config.download_threads);

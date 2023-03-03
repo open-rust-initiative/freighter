@@ -26,9 +26,10 @@ download_threads = 16
 # localhost means read from filesystem
 # It is better to add s3 domain at the first line
 serve_domains = [
-    "localhost",
-    "https://rsproxy.cn",
-    "https://static.crates.io",
+    "https://rust-proxy.obs.cn-east-3.myhuaweicloud.com",
+    # "localhost",
+    # "https://rsproxy.cn",
+    # "https://static.crates.io",
 ]
 
 #(optional) set up a git local path you want to serve
@@ -138,9 +139,10 @@ sync_beta_days = 30
 # A list of domains that provide service in order
 # localhost means read from filesystem
 serve_domains = [
-    "localhost",
-    "https://rsproxy.cn",
-    "https://static.rust-lang.org",
+    "https://rust-proxy.obs.cn-east-3.myhuaweicloud.com",
+    # "localhost",
+    # "https://rsproxy.cn",
+    # "https://static.rust-lang.org",
 ]
 
 # (optional) set this value to sync historical nightly and beta version

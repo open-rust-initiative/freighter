@@ -127,7 +127,7 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
     let channel_name;
     let channel_url;
     let file_folder;
-    tracing::error!("starting download channel: {}", channel);
+    tracing::info!("starting download channel: {}", channel);
     if let Some(date) = channel.strip_prefix("nightly-") {
         channel_name = String::from("channel-rust-nightly.toml");
         channel_url = format!("{}/dist/{}/{}", opts.config.domain, date, channel_name);

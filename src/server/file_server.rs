@@ -90,6 +90,7 @@ mod filters {
             .or(git(git_work_dir))
     }
 
+    // build '/dist/*' route, this route handle rust toolchian files request
     pub fn dist(
         config: Config,
     ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -109,6 +110,7 @@ mod filters {
             .recover(handlers::handle_missing_file)
     }
 
+    // build '/rustup/*' route, this route handle rustup-init file request
     pub fn rustup(
         config: Config,
     ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -128,6 +130,7 @@ mod filters {
             .recover(handlers::handle_missing_file)
     }
 
+    // build '/crates/*' route, this route handle crates file request
     pub fn crates(
         config: Config,
     ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -170,6 +173,7 @@ mod filters {
             .recover(handlers::handle_missing_file)
     }
 
+    // build '/crate.io-index/(git protocol)' route, this route handle gti clone and git pull request
     pub fn git(
         git_work_dir: PathBuf,
     ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -217,11 +221,12 @@ mod filters {
 }
 
 mod handlers {
-    use std::{borrow::BorrowMut, convert::Infallible, error::Error, path::PathBuf};
+    use std::{borrow::BorrowMut, convert::Infallible, error::Error, path::PathBuf, os::unix::prelude::OsStrExt};
 
     use serde::Serialize;
     use tokio::{fs::File, io::AsyncWriteExt};
     use tokio_util::codec::{BytesCodec, FramedRead};
+    use url::form_urlencoded::byte_serialize;
     use warp::{
         http,
         http::StatusCode,
@@ -255,7 +260,7 @@ mod handlers {
         serve_domains: Vec<String>,
         url_path: String,
         work_dir: PathBuf,
-        file_path: PathBuf,
+        mut file_path: PathBuf,
         is_crates: bool,
     ) -> Result<impl Reply, Rejection> {
         let full_path = work_dir.join(file_path.clone());
@@ -269,16 +274,18 @@ mod handlers {
             } else {
                 let mut uri: Uri = format!("{}/{}", domain, url_path).parse().unwrap();
                 if is_crates {
+                    if domain.contains("myhuaweicloud.com") {
+                        let name = file_path.file_name().unwrap();
+                        let encode: String = byte_serialize(name.as_bytes()).collect();
+                        file_path.pop();
+                        file_path.push(encode);
+                        tracing::debug!("file path {:?}, url_path:{:?}", file_path, url_path);
+                    }
                     uri = format!("{}/{}", domain, file_path.display())
                         .parse()
                         .unwrap();
                 }
-                tracing::info!("try to fetch file from remote: {}", uri);
-
-                let resp = reqwest::get(uri.to_string()).await.unwrap();
-                if resp.status().is_success() {
-                    return Err(reject::custom(MissingFile { uri }));
-                }
+                return Err(reject::custom(MissingFile { uri }));
             }
         }
         Err(reject::not_found())
@@ -341,6 +348,7 @@ mod handlers {
     pub async fn handle_missing_file(err: Rejection) -> Result<impl Reply, Rejection> {
         if let Some(missing_file) = err.find::<MissingFile>() {
             let uri = missing_file.uri.clone();
+            tracing::info!("redirect to: {}", uri);
             return Ok(warp::redirect::found(uri));
         }
         Err(err)

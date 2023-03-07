@@ -285,7 +285,7 @@ pub fn parse_index_and_download(
                     .join(format!("{}-{}.crate", &c.name, &c.vers));
 
                 pool.execute(move || {
-                    download_crates_with_log(file, &opts, url, c, err_record);
+                    download_crates_with_log(file, &opts, url, c, err_record).unwrap();
                 });
             }
         }
@@ -297,7 +297,7 @@ pub fn parse_index_and_download(
                 );
             }
             other_error => panic!(
-                "something wrong while open the crates file: {}",
+                "something wrong while open the index file: {}",
                 other_error
             ),
         },
@@ -311,7 +311,7 @@ pub fn download_crates_with_log(
     url: String,
     c: Crate,
     err_record: Arc<Mutex<File>>,
-) {
+) -> FreightResult {
     let down_opts = &DownloadOptions {
         proxy: opts.proxy.clone(),
         url,
@@ -335,6 +335,7 @@ pub fn download_crates_with_log(
                     fs::remove_file(path).unwrap();
                 }
             }
+            Ok(())
         }
         Err(err) => {
             let mut err_file = err_record.lock().unwrap();
@@ -347,6 +348,7 @@ pub fn download_crates_with_log(
             )
             .unwrap();
             tracing::error!("{:?}", err);
+            Err(err)
         }
     }
 }

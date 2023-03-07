@@ -46,7 +46,7 @@ use crate::cloud;
 use crate::cloud::s3::S3cmd;
 use crate::commands::command_prelude::*;
 use crate::config::Config;
-use crate::crates::channel::{sync_rust_toolchain, ChannelOptions};
+use crate::handler::channel::{sync_rust_toolchain, ChannelOptions};
 use crate::errors::FreightResult;
 
 pub fn cli() -> clap::Command {

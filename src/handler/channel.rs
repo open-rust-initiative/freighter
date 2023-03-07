@@ -150,7 +150,7 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
             }
             let pool = ThreadPool::new(opts.config.download_threads);
             // parse_channel_file and download;
-            let download_list = parse_channel_file(&channel_toml).unwrap();
+            let download_list = parse_channel_file(channel_toml).unwrap();
             download_list.into_iter().for_each(|(url, hash)| {
                 // example: https://static.rust-lang.org/dist/2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi
                 // remove url prefix "https://static.rust-lang.org/dist"

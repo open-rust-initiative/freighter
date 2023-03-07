@@ -30,13 +30,12 @@
 //!   
 
 use clap::{arg, ArgMatches};
-use log::info;
 
 use crate::cloud::s3::S3cmd;
 use crate::cloud::CloudStorage;
 use crate::commands::command_prelude::*;
 use crate::config::Config;
-use crate::crates::rustup::{sync_rustup_init, RustUpOptions};
+use crate::handler::rustup::{sync_rustup_init, RustUpOptions};
 use crate::errors::FreightResult;
 
 pub fn cli() -> clap::Command {
@@ -103,7 +102,7 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         opts.config.download_threads = download_threads;
     };
 
-    info!("RustUpOptions info : {:#?}", opts);
+    tracing::info!("RustUpOptions info : {:#?}", opts);
 
     match args.subcommand() {
         Some(("download", _)) => sync_rustup_init(&opts)?,

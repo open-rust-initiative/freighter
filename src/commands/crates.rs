@@ -50,13 +50,13 @@
 //!  
 
 use clap::{arg, ArgMatches};
-use log::{debug, info};
 
 use crate::commands::command_prelude::*;
 use crate::config::Config;
-use crate::crates::crates_file::{download, upload_to_s3, CratesOptions};
-use crate::crates::index::{pull, CrateIndex};
 use crate::errors::FreightResult;
+use crate::handler::crates_file::{download, upload_to_s3, CratesOptions};
+use crate::handler::index::{pull, CrateIndex};
+use crate::handler::DownloadMode;
 
 /// The __crates__ subcommand
 ///
@@ -76,6 +76,7 @@ pub fn cli() -> clap::Command {
         ))
         .subcommand(subcommand("download")
             .arg(flag("init", "Start init download of crates file, this will traverse all index for full download"))
+            .arg(flag("fix", "Hanlde the crates file that download failed, this opetion will traverse error log"))
             .arg(flag("upload", "upload every crate file after download"))
             .arg(arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files"))
             .arg(flag("delete-after-upload", "this will delete file after upload"))
@@ -134,10 +135,10 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
 
     match args.get_one::<usize>("download-threads").cloned() {
         Some(download_threads) => opts.config.download_threads = download_threads,
-        None => info!("use default thread count: {}", opts.config.download_threads),
+        None => tracing::info!("use default thread count: {}", opts.config.download_threads),
     };
 
-    info!("CratesOptions info : {:#?}", opts);
+    tracing::info!("CratesOptions info : {:#?}", opts);
 
     match args.subcommand() {
         Some(("pull", _args)) => {
@@ -148,7 +149,7 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         }
         Some(("download", args)) => {
             opts.upload = args.get_flag("upload");
-            opts.init_download = args.get_flag("init");
+            opts.download_mode = DownloadMode::new(args.get_flag("init"), args.get_flag("fix"));
             opts.delete_after_upload = args.get_flag("delete-after-upload");
             let bucket_name = args.get_one::<String>("bucket").cloned();
             if opts.upload {
@@ -158,7 +159,6 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
                     opts.bucket_name = bucket_name.unwrap();
                 }
             }
-            debug!("download command opts: {:?}", opts);
             if let Some(source) = domain {
                 config.crates.domain = source;
             }

@@ -1,6 +1,5 @@
 #![allow(incomplete_features)]
 use bytes::{Buf, BufMut, BytesMut};
-use log::info;
 use std::{collections::HashMap, path::PathBuf, process::Stdio};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
@@ -20,7 +19,7 @@ pub struct GitCommand {}
 
 /// ### References Codes
 ///
-/// - [conduit-git-http-backend][https://github.com/conduit-rust/conduit-git-http-backend/blob/master/src/lib.rs].
+/// - [conduit-git-http-backend][<https://github.com/conduit-rust/conduit-git-http-backend/blob/master/src/lib.rs>].
 ///
 ///
 /// hanlde request from git client
@@ -60,7 +59,7 @@ impl GitCommand {
             "Cache-Control".to_string(),
             "no-cache, max-age=0, must-revalidate".to_string(),
         );
-        info!("headers: {:?}", headers);
+        tracing::info!("headers: {:?}", headers);
         let mut resp = Response::builder();
         for (key, val) in headers {
             resp = resp.header(&key, val);
@@ -122,7 +121,7 @@ impl GitCommand {
                 headers.insert(key.to_string(), value.to_string());
             }
         }
-        info!("headers: {:?}", headers);
+        tracing::info!("headers: {:?}", headers);
         let mut resp = Response::builder();
         for (key, val) in headers {
             resp = resp.header(&key, val);

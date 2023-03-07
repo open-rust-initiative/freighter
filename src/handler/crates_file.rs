@@ -7,7 +7,7 @@
 
 use std::io::Write;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::{Path, PathBuf};
@@ -16,18 +16,18 @@ use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
 
 use chrono::Utc;
-use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
 use crate::cloud::s3::S3cmd;
 use crate::cloud::{self, CloudStorage};
 use crate::config::{CratesConfig, ProxyConfig};
-use crate::crates::index;
 use crate::download::{download_and_check_hash, DownloadOptions};
 use crate::errors::FreightResult;
+use crate::handler::index;
 
 use super::index::CrateIndex;
+use super::DownloadMode;
 
 /// CratesOptions preserve the sync subcommand config
 #[derive(Clone, Default, Debug)]
@@ -40,8 +40,9 @@ pub struct CratesOptions {
 
     /// Whether to hide progressbar when start sync.
     pub no_progressbar: bool,
+
     /// start traverse all directories
-    pub init_download: bool,
+    pub download_mode: DownloadMode,
 
     pub upload: bool,
 
@@ -55,8 +56,6 @@ pub struct CratesOptions {
 }
 
 /// Crate preserve the crates info parse from registry json file
-///
-///
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Crate {
     pub name: String,
@@ -101,47 +100,12 @@ pub enum DependencyKind {
 }
 
 /// full download and Incremental download from registry
-pub fn download(opts: &mut CratesOptions) -> FreightResult {
-    if opts.init_download {
-        full_downloads(opts).unwrap();
-    } else {
-        let it = WalkDir::new(&opts.log_path)
-            .into_iter()
-            .filter_entry(|e| {
-                e.file_name()
-                    .to_str()
-                    .unwrap()
-                    .contains(&Utc::now().date_naive().to_string())
-                    || e.file_type().is_dir()
-            })
-            .filter_map(|v| v.ok());
-        let mut input = match it.last() {
-            Some(dir) => {
-                if dir.file_type().is_file() {
-                    OpenOptions::new()
-                        .read(true)
-                        .write(true)
-                        .open(dir.path())
-                        .unwrap()
-                } else {
-                    panic!("Cannot get record file, run freighter crates pull before download")
-                }
-            }
-            None => panic!("Did you forget to run freighter crates pull before download?"),
-        };
-        let buffered = BufReader::new(&mut input);
-        info!("crates.io-index modified:");
-        let err_record = open_file_with_mutex(&opts.log_path);
-        // get last line of record file
-        let mut lines: Vec<String> = buffered.lines().map(|line| line.unwrap()).collect();
-        lines.reverse();
-        if let Some(line) = lines.first() {
-            let vec: Vec<&str> = line.split(',').collect();
-            info!("{:?}", line);
-            index::git2_diff(opts, vec[0], vec[1], err_record).unwrap();
-        }
+pub fn download(opts: &CratesOptions) -> FreightResult {
+    match opts.download_mode {
+        DownloadMode::Init => full_downloads(opts).unwrap(),
+        DownloadMode::Fix => fix_download(opts).unwrap(),
+        DownloadMode::Increment => incremental_download(opts).unwrap(),
     }
-
     Ok(())
 }
 
@@ -164,11 +128,99 @@ pub fn full_downloads(opts: &CratesOptions) -> FreightResult {
         .filter_map(|v| v.ok())
         .for_each(|x| {
             if x.file_type().is_file() && x.path().extension().unwrap_or_default() != "json" {
-                parse_index_and_download(x.path().to_path_buf(), opts, &pool, &err_record).unwrap();
+                parse_index_and_download(&x.path().to_path_buf(), opts, &pool, &err_record)
+                    .unwrap();
             }
         });
     pool.join();
-    info!("sync ends with {} task failed", pool.panic_count());
+    tracing::info!("sync ends with {} task failed", pool.panic_count());
+    Ok(())
+}
+
+pub fn incremental_download(opts: &CratesOptions) -> FreightResult {
+    let it = WalkDir::new(&opts.log_path)
+        .into_iter()
+        .filter_entry(|e| {
+            e.file_name()
+                .to_str()
+                .unwrap()
+                .contains(&Utc::now().date_naive().to_string())
+                || e.file_type().is_dir()
+        })
+        .filter_map(|v| v.ok());
+    let mut input = match it.last() {
+        Some(dir) => {
+            if dir.file_type().is_file() {
+                OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(dir.path())
+                    .unwrap()
+            } else {
+                panic!("Cannot get record file, run freighter crates pull before download")
+            }
+        }
+        None => panic!("Did you forget to run freighter crates pull before download?"),
+    };
+    let buffered = BufReader::new(&mut input);
+    tracing::info!("crates.io-index modified:");
+    let err_record = open_file_with_mutex(&opts.log_path);
+    // get last line of record file
+    let mut lines: Vec<String> = buffered.lines().map(|line| line.unwrap()).collect();
+    lines.reverse();
+    if let Some(line) = lines.first() {
+        let vec: Vec<&str> = line.split(',').collect();
+        tracing::info!("{:?}", line);
+        index::git2_diff(opts, vec[0], vec[1], err_record).unwrap();
+    }
+    Ok(())
+}
+
+/// fix the previous error download crates
+pub fn fix_download(opts: &CratesOptions) -> FreightResult {
+    let pool = ThreadPool::new(opts.config.download_threads);
+
+    let file_name = &opts.log_path.join("error-crates.log");
+    let err_record = OpenOptions::new().read(true).open(file_name).unwrap();
+    let buffered = BufReader::new(err_record);
+    let mut visited: HashSet<String> = HashSet::new();
+
+    let err_record_with_mutex = open_file_with_mutex(&opts.log_path);
+
+    for line in buffered.lines() {
+        let unwrap_line = line.unwrap();
+        let vec: Vec<&str> = unwrap_line.split(", ").collect();
+        let crates_name_version = vec[0];
+        let mut name_split: Vec<&str> = crates_name_version.split('-').collect();
+        name_split.pop();
+        let crates_name = name_split.into_iter().collect::<String>();
+        if !visited.contains(&crates_name) {
+            if crates_name.len() >= 4 {
+                let suffix = format!(
+                    "{}/{}/{}",
+                    &crates_name[0..2],
+                    &crates_name[2..4],
+                    crates_name
+                );
+                let index_path = opts.index.path.join(suffix);
+                parse_index_and_download(&index_path, opts, &pool, &err_record_with_mutex).unwrap();
+                visited.insert(crates_name.to_owned());
+                tracing::info!("handle success: {:?}", &crates_name_version);
+            }
+            // skip the crates which name less than 4 bytes
+        } else {
+            // skip visited
+            tracing::info!(
+                "skip different verion of same crates: {}",
+                crates_name_version
+            );
+        }
+    }
+    pool.join();
+    tracing::info!("sync ends with {} task failed", pool.panic_count());
+    if pool.panic_count() == 0 {
+        fs::remove_file(file_name).unwrap();
+    }
     Ok(())
 }
 
@@ -207,12 +259,12 @@ pub fn is_not_hidden(entry: &DirEntry) -> bool {
 }
 
 pub fn parse_index_and_download(
-    index_path: PathBuf,
+    index_path: &PathBuf,
     opts: &CratesOptions,
     pool: &ThreadPool,
     err_record: &Arc<Mutex<File>>,
 ) -> FreightResult {
-    match File::open(&index_path) {
+    match File::open(index_path) {
         Ok(f) => {
             let buffered = BufReader::new(f);
 
@@ -239,7 +291,7 @@ pub fn parse_index_and_download(
         }
         Err(err) => match err.kind() {
             ErrorKind::NotFound => {
-                warn!(
+                tracing::warn!(
                     "This file might have been removed from crates.io:{}",
                     &index_path.display()
                 );
@@ -277,7 +329,7 @@ pub fn download_crates_with_log(
                         .unwrap()
                         .replace(opts.crates_path.to_str().unwrap(), "")
                 );
-                info!("s3_path: {}, {}", s3_path, opts.delete_after_upload);
+                tracing::info!("s3_path: {}, {}", s3_path, opts.delete_after_upload);
                 let uploded = s3.upload_file(path, &s3_path, &opts.bucket_name);
                 if uploded.is_ok() && opts.delete_after_upload {
                     fs::remove_file(path).unwrap();
@@ -294,7 +346,7 @@ pub fn download_crates_with_log(
                 Utc::now().timestamp()
             )
             .unwrap();
-            error!("{:?}", err);
+            tracing::error!("{:?}", err);
         }
     }
 }

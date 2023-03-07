@@ -17,7 +17,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use clap::{arg, ArgMatches};
-use log::LevelFilter;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::append::rolling_file::policy::compound::roll::delete::DeleteRoller;
 use log4rs::append::rolling_file::policy::compound::trigger::size::SizeTrigger;
@@ -27,6 +26,7 @@ use log4rs::config::runtime::Config as Log4rsConfig;
 use log4rs::config::Logger;
 use log4rs::config::{Appender, Root};
 use log4rs::encode::pattern::PatternEncoder;
+use tracing::log::LevelFilter;
 
 use crate::commands;
 use crate::config::{Config, LogConfig};

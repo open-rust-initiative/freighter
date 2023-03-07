@@ -5,7 +5,6 @@
 //!
 //!
 
-use log::info;
 
 pub type FreightResult = Result<(), FreighterError>;
 
@@ -39,7 +38,7 @@ impl FreighterError {
     }
 
     pub fn print(&self) {
-        info!("{}", self.error.as_ref().unwrap());
+        tracing::info!("{}", self.error.as_ref().unwrap());
     }
 }
 

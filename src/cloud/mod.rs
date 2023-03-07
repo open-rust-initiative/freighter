@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
-use crate::{crates::crates_file::is_not_hidden, errors::FreightResult};
+use crate::{handler::crates_file::is_not_hidden, errors::FreightResult};
 
 use self::s3::S3cmd;
 

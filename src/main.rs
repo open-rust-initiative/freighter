@@ -8,7 +8,7 @@ mod cli;
 mod cloud;
 mod commands;
 mod config;
-mod crates;
+mod handler;
 mod download;
 mod errors;
 mod server;

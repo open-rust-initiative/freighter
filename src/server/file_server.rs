@@ -300,7 +300,7 @@ mod handlers {
 
     /// ### References Codes
     ///
-    /// - [warp](https://github.com/seanmonstar/warp)'s rejections (example)[https://github.com/seanmonstar/warp/blob/master/examples/rejections.rs].
+    /// - [warp](<https://github.com/seanmonstar/warp>)'s rejections (example)[<https://github.com/seanmonstar/warp/blob/master/examples/rejections.rs>].
     ///
     ///
     // This function receives a `Rejection` and tries to return a custom

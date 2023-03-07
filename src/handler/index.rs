@@ -12,7 +12,6 @@ use git2::{
     ProxyOptions, RemoteCallbacks, Repository, Sort,
 };
 
-use log::{info, warn};
 use url::Url;
 
 use std::cell::RefCell;
@@ -34,7 +33,7 @@ use super::crates_file::{parse_index_and_download, CratesOptions};
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CrateIndex {
     pub url: Url,
-    /// index path
+    /// /${HOME}/freighter/crates.io-index
     pub path: PathBuf,
 }
 
@@ -85,7 +84,7 @@ impl CrateIndex {
         let fetch_commit = do_fetch(&repo, &[CrateIndex::REMOTE_BRANCH], &mut remote, opts)?;
 
         self.save_commit_log(&opts.log_path, &commit.id(), &fetch_commit.id());
-        info!(
+        tracing::info!(
             "commit id:{}, remote id :{}",
             commit.id(),
             &fetch_commit.id()
@@ -96,8 +95,8 @@ impl CrateIndex {
     /// Clone the `CrateIndex` to a local directory.
     ///
     ///
-    pub fn git_clone(&self, opts: &mut CratesOptions) -> FreightResult {
-        info!("Starting git clone...");
+    pub fn git_clone(&self, opts: &CratesOptions) -> FreightResult {
+        tracing::info!("Starting git clone...");
         let state = RefCell::new(State {
             progress: None,
             total: 0,
@@ -221,10 +220,10 @@ fn print(state: &mut State) {
 }
 
 /// If destination path is not empty, run pull instead of clone
-pub fn pull(opts: &mut CratesOptions) -> FreightResult {
+pub fn pull(opts: &CratesOptions) -> FreightResult {
     let index = opts.index.to_owned();
     if opts.no_progressbar {
-        info!("no-progressbar has been set to true, it will not be displayed!");
+        tracing::info!("no-progressbar has been set to true, it will not be displayed!");
     }
     let index_dir = Path::new(index.path.as_path());
     // try to remove index dir if it's empty
@@ -235,7 +234,7 @@ pub fn pull(opts: &mut CratesOptions) -> FreightResult {
             .filter_map(|x| x.ok())
             .any(|e| !e.file_name().to_str().unwrap().contains("git"))
         {
-            warn!(
+            tracing::warn!(
                 "It seems last task has been broken and {} is empty, 
             freighter had to removed this index, and then run init again",
                 index_dir.display()
@@ -312,7 +311,7 @@ fn handle_diff_line(
         return true;
     }
     let index_path = opts.index.path.join(path_suffix);
-    parse_index_and_download(index_path, opts, pool, err_record).unwrap();
+    parse_index_and_download(&index_path, opts, pool, err_record).unwrap();
     true
 }
 
@@ -372,7 +371,7 @@ fn do_fetch<'a>(
     // Always fetch all tags.
     // Perform a download and also update tips
     fo.download_tags(git2::AutotagOption::All);
-    info!("Fetching {} for repo", remote.name().unwrap());
+    tracing::info!("Fetching {} for repo", remote.name().unwrap());
     remote.fetch(refs, Some(&mut fo), None).unwrap();
 
     // If there are local objects (we got a thin pack), then tell the user
@@ -411,7 +410,7 @@ fn fast_forward(
         None => String::from_utf8_lossy(lb.name_bytes()).to_string(),
     };
     let msg = format!("Fast-Forward: Setting {} to id: {}", name, rc.id());
-    info!("{}", msg);
+    tracing::info!("{}", msg);
     lb.set_target(rc.id(), &msg)?;
     repo.set_head(&name)?;
     repo.checkout_head(Some(
@@ -438,7 +437,7 @@ fn normal_merge(
     let mut idx = repo.merge_trees(&ancestor, &local_tree, &remote_tree, None)?;
 
     if idx.has_conflicts() {
-        info!("Merge conflicts detected...");
+        tracing::info!("Merge conflicts detected...");
         repo.checkout_index(Some(&mut idx), None)?;
         return Ok(());
     }
@@ -473,7 +472,7 @@ fn do_merge<'a>(
 
     // 2. Do the appropriate merge
     if analysis.0.is_fast_forward() {
-        info!("Doing a fast forward");
+        tracing::info!("Doing a fast forward");
         // do a fast forward
         let ref_name = format!("refs/heads/{}", remote_branch);
         match repo.find_reference(&ref_name) {
@@ -504,7 +503,7 @@ fn do_merge<'a>(
         let head_commit = repo.reference_to_annotated_commit(&repo.head()?)?;
         normal_merge(repo, &head_commit, &fetch_commit)?;
     } else {
-        info!("Nothing to do...");
+        tracing::info!("Nothing to do...");
     }
 
     Ok(())
@@ -514,7 +513,7 @@ fn do_merge<'a>(
 mod tests {
     use std::path::PathBuf;
 
-    use crate::crates::crates_file::CratesOptions;
+    use crate::handler::crates_file::CratesOptions;
 
     #[test]
     fn test_clone() {

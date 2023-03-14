@@ -74,6 +74,13 @@ pub struct Crate {
     pub v: Option<u32>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ErrorCrate {
+    pub name: String,
+    pub vers: String,
+    pub time: String,
+}
+
 /// Dependencies maintain relationships between crate
 ///
 ///
@@ -190,32 +197,25 @@ pub fn fix_download(opts: &CratesOptions) -> FreightResult {
     let err_record_with_mutex = open_file_with_mutex(&opts.log_path);
 
     for line in buffered.lines() {
-        let unwrap_line = line.unwrap();
-        let vec: Vec<&str> = unwrap_line.split(", ").collect();
-        let crates_name_version = vec[0];
-        let mut name_split: Vec<&str> = crates_name_version.split('-').collect();
-        name_split.pop();
-        let crates_name = name_split.into_iter().collect::<String>();
-        if !visited.contains(&crates_name) {
-            if crates_name.len() >= 4 {
-                let suffix = format!(
-                    "{}/{}/{}",
-                    &crates_name[0..2],
-                    &crates_name[2..4],
-                    crates_name
-                );
+        let line = line.unwrap();
+        let c: ErrorCrate = serde_json::from_str(&line).unwrap();
+        let ErrorCrate {
+            name,
+            vers,
+            time: _,
+        } = c;
+        if !visited.contains(&name) {
+            if name.len() >= 4 {
+                let suffix = format!("{}/{}/{}", &name[0..2], &name[2..4], name);
                 let index_path = opts.index.path.join(suffix);
                 parse_index_and_download(&index_path, opts, &pool, &err_record_with_mutex).unwrap();
-                visited.insert(crates_name.to_owned());
-                tracing::info!("handle success: {:?}", &crates_name_version);
+                visited.insert(name.to_owned());
+                tracing::info!("handle success: {}-{}", &name, &vers);
             }
             // skip the crates which name less than 4 bytes
         } else {
             // skip visited
-            tracing::info!(
-                "skip different verion of same crates: {}",
-                crates_name_version
-            );
+            tracing::info!("skip different verion of same crates: {}-{}", &name, &vers);
         }
     }
     pool.join();
@@ -347,14 +347,15 @@ pub fn download_crates_with_log(
         }
         Err(err) => {
             let mut err_file = err_record.lock().unwrap();
-            writeln!(
-                err_file,
-                "{}-{}.crate, {}",
-                &c.name,
-                &c.vers,
-                Utc::now().timestamp()
-            )
-            .unwrap();
+            let err_crate = ErrorCrate {
+                name: c.name,
+                vers: c.vers,
+                time: Utc::now().timestamp().to_string(),
+            };
+            let json = serde_json::to_string(&err_crate).unwrap();
+            // Write the JSON to the file
+            err_file.write_all(json.as_bytes()).unwrap();
+            err_file.write_all(b"\n")?;
             tracing::error!("{:?}", err);
             Err(err)
         }

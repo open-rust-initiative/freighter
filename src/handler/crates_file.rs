@@ -48,6 +48,8 @@ pub struct CratesOptions {
 
     pub crates_path: PathBuf,
 
+    pub crates_name: Option<String>,
+
     pub log_path: PathBuf,
 
     pub bucket_name: String,
@@ -226,13 +228,22 @@ pub fn fix_download(opts: &CratesOptions) -> FreightResult {
 
 pub fn upload_to_s3(opts: &CratesOptions) -> FreightResult {
     let s3cmd = S3cmd::default();
-    cloud::upload_with_pool(
-        opts.config.download_threads,
-        opts.crates_path.clone(),
-        opts.bucket_name.clone(),
-        s3cmd,
-    )
-    .unwrap();
+    if opts.crates_name.is_none() {
+        cloud::upload_with_pool(
+            opts.config.download_threads,
+            opts.crates_path.clone(),
+            opts.bucket_name.clone(),
+            s3cmd,
+        )
+        .unwrap();
+    } else {
+        cloud::upload_single_dir(
+            opts.crates_path.clone(),
+            opts.crates_name.clone().unwrap(),
+            opts.bucket_name.clone(),
+            s3cmd,
+        )
+    }
     Ok(())
 }
 
@@ -296,10 +307,7 @@ pub fn parse_index_and_download(
                     &index_path.display()
                 );
             }
-            other_error => panic!(
-                "something wrong while open the index file: {}",
-                other_error
-            ),
+            other_error => panic!("something wrong while open the index file: {}", other_error),
         },
     };
     Ok(())

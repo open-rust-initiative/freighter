@@ -72,8 +72,9 @@ pub fn cli() -> clap::Command {
         this param can be changed in the configuration file or pass it here"))
         .subcommand(subcommand("pull"))
         .subcommand(subcommand("upload")
-        .arg(arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files").required(true)
-        ))
+        .arg(arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files").required(true))
+        .arg(arg!(--"name" <VALUE> "only upload specify crates").required(true))
+        )
         .subcommand(subcommand("download")
             .arg(flag("init", "Start init download of crates file, this will traverse all index for full download"))
             .arg(flag("fix", "Hanlde the crates file that download failed, this opetion will traverse error log"))
@@ -166,6 +167,7 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         }
         Some(("upload", args)) => {
             opts.bucket_name = args.get_one::<String>("bucket").cloned().unwrap();
+            opts.crates_name = args.get_one::<String>("name").cloned();
             upload_to_s3(opts)?
         }
         Some((cmd, _)) => {

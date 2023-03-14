@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
-use crate::{handler::crates_file::is_not_hidden, errors::FreightResult};
+use crate::{errors::FreightResult, handler::crates_file::is_not_hidden};
 
 use self::s3::S3cmd;
 
@@ -58,4 +58,22 @@ pub fn upload_with_pool(
     pool.join();
     tracing::info!("sync ends with {} task failed", pool.panic_count());
     Ok(())
+}
+
+pub fn upload_single_dir<T: CloudStorage>(
+    path: PathBuf,
+    crates_name: String,
+    bucket_name: String,
+    cloud_storage: T,
+) {
+    let bucket_name = format!(
+        "{}/{}/{}",
+        bucket_name,
+        path.file_name().unwrap().to_str().unwrap(),
+        crates_name
+    );
+    tracing::info!("bucket_path: {}", bucket_name);
+    cloud_storage
+        .upload_folder(path.join(crates_name).to_str().unwrap(), &bucket_name)
+        .unwrap();
 }

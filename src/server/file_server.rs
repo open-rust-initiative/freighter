@@ -221,7 +221,7 @@ mod filters {
 }
 
 mod handlers {
-    use std::{borrow::BorrowMut, convert::Infallible, error::Error, path::PathBuf, os::unix::prelude::OsStrExt};
+    use std::{borrow::BorrowMut, convert::Infallible, error::Error, path::PathBuf};
 
     use serde::Serialize;
     use tokio::{fs::File, io::AsyncWriteExt};
@@ -275,7 +275,7 @@ mod handlers {
                 let mut uri: Uri = format!("{}/{}", domain, url_path).parse().unwrap();
                 if is_crates {
                     if domain.contains("myhuaweicloud.com") {
-                        let name = file_path.file_name().unwrap();
+                        let name = file_path.file_name().unwrap().to_str().unwrap();
                         let encode: String = byte_serialize(name.as_bytes()).collect();
                         file_path.pop();
                         file_path.push(encode);

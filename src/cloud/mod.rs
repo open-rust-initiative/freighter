@@ -67,10 +67,9 @@ pub fn upload_single_dir<T: CloudStorage>(
     cloud_storage: T,
 ) {
     let bucket_name = format!(
-        "{}/{}/{}",
+        "{}/{}",
         bucket_name,
-        path.file_name().unwrap().to_str().unwrap(),
-        crates_name
+        path.file_name().unwrap().to_str().unwrap()
     );
     tracing::info!("bucket_path: {}", bucket_name);
     cloud_storage

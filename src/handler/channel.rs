@@ -9,6 +9,7 @@ use std::{
     collections::HashMap,
     fs::{self, DirEntry},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use chrono::{Duration, NaiveDate, Utc};
@@ -126,24 +127,24 @@ pub fn sync_rust_toolchain(opts: &ChannelOptions) -> FreightResult {
 pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
     let channel_name;
     let channel_url;
-    let file_folder;
+    let channel_folder;
     tracing::info!("starting download channel: {}", channel);
     if let Some(date) = channel.strip_prefix("nightly-") {
         channel_name = String::from("channel-rust-nightly.toml");
         channel_url = format!("{}/dist/{}/{}", opts.config.domain, date, channel_name);
-        file_folder = opts.dist_path.to_owned().join(date);
+        channel_folder = opts.dist_path.to_owned().join(date);
     } else if let Some(date) = channel.strip_prefix("beta-") {
         channel_name = String::from("channel-rust-beta.toml");
         channel_url = format!("{}/dist/{}/{}", opts.config.domain, date, channel_name);
-        file_folder = opts.dist_path.to_owned().join(date);
+        channel_folder = opts.dist_path.to_owned().join(date);
     } else {
         channel_name = format!("channel-rust-{}.toml", channel);
         channel_url = format!("{}/dist/{}", opts.config.domain, channel_name);
-        file_folder = opts.dist_path.to_owned();
+        channel_folder = opts.dist_path.to_owned();
     }
-    match download_file_with_sha(&channel_url, &file_folder, &channel_name, &opts.proxy) {
+    match download_file_with_sha(&channel_url, &channel_folder, &channel_name, &opts.proxy) {
         Ok(res) => {
-            let channel_toml = &file_folder.join(channel_name);
+            let channel_toml = &channel_folder.join(channel_name);
             if !res && !channel_toml.exists() {
                 tracing::error!("skipping channel: {}", channel);
                 return Ok(());
@@ -151,9 +152,11 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
             let pool = ThreadPool::new(opts.config.download_threads);
             // parse_channel_file and download;
             let download_list = parse_channel_file(channel_toml).unwrap();
+            let s3cmd = Arc::new(S3cmd::default());
             download_list.into_iter().for_each(|(url, hash)| {
                 // example: https://static.rust-lang.org/dist/2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi
-                // remove url prefix "https://static.rust-lang.org/dist"
+                // these code was used to remove url prefix "https://static.rust-lang.org/dist"
+                // and get "2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi"
                 let path: PathBuf = std::iter::once(opts.dist_path.to_owned())
                     .chain(
                         url.split('/').map(PathBuf::from).collect::<Vec<PathBuf>>()[4..].to_owned(),
@@ -165,7 +168,7 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
                     opts.bucket.to_owned(),
                     opts.delete_after_upload,
                 );
-                let s3cmd = S3cmd::default();
+                let s3cmd = s3cmd.clone();
                 let proxy = opts.proxy.clone();
                 pool.execute(move || {
                     let down_opts = &DownloadOptions { proxy, url, path };
@@ -187,6 +190,19 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
                 });
             });
             pool.join();
+            // upload toml file after all channel files handle success
+            if opts.upload {
+                let s3_path = format!(
+                    "dist{}",
+                    channel_toml
+                        .to_str()
+                        .unwrap()
+                        .replace(&opts.dist_path.to_str().unwrap(), "")
+                );
+                s3cmd
+                    .upload_file(channel_toml, &s3_path, &opts.bucket.clone().unwrap())
+                    .unwrap();
+            }
         }
         Err(_err) => {
             tracing::info!("skipping download channel:{}", channel);

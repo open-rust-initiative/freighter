@@ -2,7 +2,10 @@
 //!
 //!
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
@@ -30,8 +33,7 @@ pub fn upload_with_pool(
     cloud_storage: S3cmd,
 ) -> FreightResult {
     let pool = ThreadPool::new(download_threads);
-    // let cloud_storage = S3cmd::default();
-    // let cloud = Arc::new(Mutex::new(cloud_storage));
+    let cloud = Arc::new(cloud_storage);
     let bucket_name = format!(
         "{}/{}",
         bucket_name,
@@ -45,12 +47,10 @@ pub fn upload_with_pool(
         .filter_map(|v| v.ok())
         .for_each(|x| {
             let bucket_name = bucket_name.clone();
-            let cloud_storage = cloud_storage.clone();
-            // let cloud = Arc::clone(&cloud);
+            let cloud_in = cloud.clone();
             pool.execute(move || {
-                // let storage = cloud.lock().unwrap();
                 let path = x.path();
-                cloud_storage
+                cloud_in
                     .upload_folder(path.to_str().unwrap(), &bucket_name)
                     .unwrap();
             });

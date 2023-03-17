@@ -106,6 +106,7 @@ pub fn sync_rust_toolchain(opts: &ChannelOptions) -> FreightResult {
         sync_channel(opts, "nightly")?;
         // step 3.2: sync specified channel version by config file
         tracing::info!("step 3.2: sync specified channel version by config file");
+        // consider move sync stable version to another command as it takes to much time
         config.sync_stable_versions.iter().for_each(|channel| {
             sync_channel(opts, channel).unwrap();
         });
@@ -190,19 +191,7 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
                 });
             });
             pool.join();
-            // upload toml file after all channel files handle success
-            if opts.upload {
-                let s3_path = format!(
-                    "dist{}",
-                    channel_toml
-                        .to_str()
-                        .unwrap()
-                        .replace(&opts.dist_path.to_str().unwrap(), "")
-                );
-                s3cmd
-                    .upload_file(channel_toml, &s3_path, &opts.bucket.clone().unwrap())
-                    .unwrap();
-            }
+            replace_toml_and_sha(opts, s3cmd, channel_toml);
         }
         Err(_err) => {
             tracing::info!("skipping download channel:{}", channel);
@@ -211,6 +200,24 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
     Ok(())
 }
 
+// upload toml file and sha256 after all files handle success
+pub fn replace_toml_and_sha(opts: &ChannelOptions, s3cmd: Arc<S3cmd>, channel_toml: &Path) {
+    let shafile = channel_toml.with_extension("toml.sha256");
+    let files: Vec<&Path> = vec![&channel_toml, &shafile];
+    if opts.upload {
+        for file in files {
+            let s3_path = format!(
+                "dist{}",
+                file.to_str()
+                    .unwrap()
+                    .replace(&opts.dist_path.to_str().unwrap(), "")
+            );
+            s3cmd
+                .upload_file(file, &s3_path, &opts.bucket.clone().unwrap())
+                .unwrap();
+        }
+    }
+}
 // parse channel file to get download url and hash
 pub fn parse_channel_file(path: &Path) -> Result<Vec<(String, String)>, FreighterError> {
     let content = fs::read_to_string(path).unwrap();

@@ -78,6 +78,7 @@ pub fn cli() -> clap::Command {
         .subcommand(subcommand("download")
             .arg(flag("init", "Start init download of crates file, this will traverse all index for full download"))
             .arg(flag("fix", "Hanlde the crates file that download failed, this opetion will traverse error log"))
+            .arg(arg!(--"name" <VALUE> "only fix the crates you specified, this command will try to re-download the crates").required(true))
             .arg(flag("upload", "upload every crate file after download"))
             .arg(arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files"))
             .arg(flag("delete-after-upload", "this will delete file after upload"))
@@ -152,6 +153,7 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
             opts.upload = args.get_flag("upload");
             opts.download_mode = DownloadMode::new(args.get_flag("init"), args.get_flag("fix"));
             opts.delete_after_upload = args.get_flag("delete-after-upload");
+            opts.crates_name = args.get_one::<String>("name").cloned();
             let bucket_name = args.get_one::<String>("bucket").cloned();
             if opts.upload {
                 if bucket_name.is_none() {

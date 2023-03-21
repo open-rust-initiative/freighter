@@ -35,8 +35,8 @@ use crate::cloud::s3::S3cmd;
 use crate::cloud::CloudStorage;
 use crate::commands::command_prelude::*;
 use crate::config::Config;
-use crate::handler::rustup::{sync_rustup_init, RustUpOptions};
 use crate::errors::FreightResult;
+use crate::handler::rustup::{sync_rustup_init, RustUpOptions};
 
 pub fn cli() -> clap::Command {
     clap::Command::new("rustup")

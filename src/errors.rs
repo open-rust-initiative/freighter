@@ -5,7 +5,6 @@
 //!
 //!
 
-
 pub type FreightResult = Result<(), FreighterError>;
 
 ///

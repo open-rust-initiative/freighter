@@ -71,6 +71,8 @@ pub struct ChannelOptions {
     pub delete_after_upload: bool,
 
     pub sync_history: bool,
+
+    pub init: bool,
 }
 
 /// entrance function
@@ -104,12 +106,13 @@ pub fn sync_rust_toolchain(opts: &ChannelOptions) -> FreightResult {
         sync_channel(opts, "stable")?;
         sync_channel(opts, "beta")?;
         sync_channel(opts, "nightly")?;
-        // step 3.2: sync specified channel version by config file
-        tracing::info!("step 3.2: sync specified channel version by config file");
-        // consider move sync stable version to another command as it takes to much time
-        config.sync_stable_versions.iter().for_each(|channel| {
-            sync_channel(opts, channel).unwrap();
-        });
+        if opts.init {
+            // step 3.2: sync specified channel version by config file
+            tracing::info!("step 3.2:(optional) sync specified channel version by config file");
+            config.sync_stable_versions.iter().for_each(|channel| {
+                sync_channel(opts, channel).unwrap();
+            });
+        }
     }
     // step 3: clean local historical channel files if needed
     if opts.clean {
@@ -203,14 +206,14 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
 // upload toml file and sha256 after all files handle success
 pub fn replace_toml_and_sha(opts: &ChannelOptions, s3cmd: Arc<S3cmd>, channel_toml: &Path) {
     let shafile = channel_toml.with_extension("toml.sha256");
-    let files: Vec<&Path> = vec![&channel_toml, &shafile];
+    let files: Vec<&Path> = vec![channel_toml, &shafile];
     if opts.upload {
         for file in files {
             let s3_path = format!(
                 "dist{}",
                 file.to_str()
                     .unwrap()
-                    .replace(&opts.dist_path.to_str().unwrap(), "")
+                    .replace(opts.dist_path.to_str().unwrap(), "")
             );
             s3cmd
                 .upload_file(file, &s3_path, &opts.bucket.clone().unwrap())

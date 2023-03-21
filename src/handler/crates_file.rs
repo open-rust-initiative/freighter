@@ -57,6 +57,18 @@ pub struct CratesOptions {
     pub delete_after_upload: bool,
 }
 
+impl CratesOptions {
+    // the path rules of craes index file
+    pub fn get_index_path(&self, name: &str) -> PathBuf {
+        let suffix = match name.len() {
+            1..=2 => format!("{}/{}", name.len(), name),
+            3 => format!("{}/{}/{}", name.len(), &name[0..1], name),
+            _ => format!("{}/{}/{}", &name[0..2], &name[2..4], name),
+        };
+        self.index.path.join(suffix)
+    }
+}
+
 /// Crate preserve the crates info parse from registry json file
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Crate {
@@ -188,39 +200,38 @@ pub fn incremental_download(opts: &CratesOptions) -> FreightResult {
 /// fix the previous error download crates
 pub fn fix_download(opts: &CratesOptions) -> FreightResult {
     let pool = ThreadPool::new(opts.config.download_threads);
-
     let file_name = &opts.log_path.join("error-crates.log");
-    let err_record = OpenOptions::new().read(true).open(file_name).unwrap();
-    let buffered = BufReader::new(err_record);
+
     let mut visited: HashSet<String> = HashSet::new();
-
     let err_record_with_mutex = open_file_with_mutex(&opts.log_path);
-
-    for line in buffered.lines() {
-        let line = line.unwrap();
-        let c: ErrorCrate = serde_json::from_str(&line).unwrap();
-        let ErrorCrate {
-            name,
-            vers,
-            time: _,
-        } = c;
-        if !visited.contains(&name) {
-            if name.len() >= 4 {
-                let suffix = format!("{}/{}/{}", &name[0..2], &name[2..4], name);
-                let index_path = opts.index.path.join(suffix);
+    if opts.crates_name.is_some() {
+        let index_path = opts.get_index_path(&opts.crates_name.clone().unwrap());
+        parse_index_and_download(&index_path, opts, &pool, &err_record_with_mutex).unwrap();
+    } else {
+        let err_record = OpenOptions::new().read(true).open(file_name).unwrap();
+        let buffered = BufReader::new(err_record);
+        for line in buffered.lines() {
+            let line = line.unwrap();
+            let c: ErrorCrate = serde_json::from_str(&line).unwrap();
+            let ErrorCrate {
+                name,
+                vers,
+                time: _,
+            } = c;
+            if !visited.contains(&name) {
+                let index_path = opts.get_index_path(&name);
                 parse_index_and_download(&index_path, opts, &pool, &err_record_with_mutex).unwrap();
                 visited.insert(name.to_owned());
                 tracing::info!("handle success: {}-{}", &name, &vers);
+            } else {
+                // skipping visited
+                tracing::info!("skip different verion of same crates: {}-{}", &name, &vers);
             }
-            // skip the crates which name less than 4 bytes
-        } else {
-            // skip visited
-            tracing::info!("skip different verion of same crates: {}-{}", &name, &vers);
         }
     }
     pool.join();
     tracing::info!("sync ends with {} task failed", pool.panic_count());
-    if pool.panic_count() == 0 {
+    if opts.crates_name.is_none() && pool.panic_count() == 0 {
         fs::remove_file(file_name).unwrap();
     }
     Ok(())

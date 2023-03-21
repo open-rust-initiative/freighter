@@ -8,9 +8,9 @@ mod cli;
 mod cloud;
 mod commands;
 mod config;
-mod handler;
 mod download;
 mod errors;
+mod handler;
 mod server;
 
 ///

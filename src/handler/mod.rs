@@ -10,7 +10,6 @@ pub mod crates_file;
 pub mod index;
 pub mod rustup;
 
-
 #[derive(Clone, Default, Debug)]
 pub enum DownloadMode {
     Init,

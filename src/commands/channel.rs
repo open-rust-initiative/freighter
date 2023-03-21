@@ -46,14 +46,15 @@ use crate::cloud;
 use crate::cloud::s3::S3cmd;
 use crate::commands::command_prelude::*;
 use crate::config::Config;
-use crate::handler::channel::{sync_rust_toolchain, ChannelOptions};
 use crate::errors::FreightResult;
+use crate::handler::channel::{sync_rust_toolchain, ChannelOptions};
 
 pub fn cli() -> clap::Command {
     clap::Command::new("channel")
         .subcommand(subcommand("download")
             .arg(flag("clean", "clean up historical versions"))
             .arg(arg!(-v --"version" <VALUE> "only download the version you specified"))
+            .arg(flag("init", "this command will download the histoey release stable version which you matain in your config file"))
             .arg(flag("upload", "upload every crate file after download"))
             .arg(flag("history", "only sync history nightly and beta versions"))
             .arg(arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files"))
@@ -136,6 +137,7 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
                 version: args.get_one::<String>("version").cloned(),
                 delete_after_upload: args.get_flag("delete-after-upload"),
                 sync_history: args.get_flag("history"),
+                init: args.get_flag("init"),
                 ..opts
             };
             if down_opts.upload && down_opts.bucket.is_none() {

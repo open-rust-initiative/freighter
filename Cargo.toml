@@ -28,7 +28,7 @@ openssl = { version = "0.10.45", features = ["vendored"] }
 chrono = "0.4.22"
 sha2 = "0.10.6"
 threadpool = "1.8.1"
-dirs = "4.0.0"
+dirs = "5.0.0"
 toml = "0.7.1"
 log4rs = {version = "1.2.0", features = ["toml_format"] }
 tokio = { version = "1.22.0", features = ["full"] }

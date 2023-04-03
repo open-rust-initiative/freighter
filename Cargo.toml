@@ -17,7 +17,7 @@ description = """
 anyhow = "1.0.66"
 thiserror = "1.0.36"
 clap = "4.0.29"
-git2 = "0.16.0"
+git2 = "0.17.0"
 git2-curl = "0.17"
 url = "2.2.2"
 serde = { version = "1.0.148", features = ["derive"] }

@@ -41,7 +41,7 @@ impl Download for BlockingReqwest {
 
         let client_builder = reqwest::blocking::Client::builder();
         let reqwest_client = if proxy.enable {
-            let proxy = reqwest::Proxy::https(proxy.download_proxy.clone()).unwrap();
+            let proxy = reqwest::Proxy::all(proxy.download_proxy.clone()).unwrap();
             client_builder.proxy(proxy).build().unwrap()
         } else {
             client_builder.build().unwrap()

@@ -15,7 +15,7 @@ pub struct FreighterError {
     pub code: i32,
 }
 
-/// The Freighter error is the error type used at Freight's CLI and others.
+/// The Freighter error is the error type used at Freighter's CLI and others.
 ///
 impl FreighterError {
     pub fn new(error: anyhow::Error, code: i32) -> FreighterError {

@@ -513,7 +513,7 @@ fn do_merge<'a>(
 mod tests {
     use std::path::PathBuf;
 
-    use crate::handler::crates_file::CratesOptions;
+    // use crate::handler::crates_file::CratesOptions;
 
     #[test]
     fn test_clone() {

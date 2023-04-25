@@ -15,6 +15,8 @@ use crate::config::ProxyConfig;
 use crate::errors::FreighterError;
 
 use sha2::{Digest, Sha256};
+use url::form_urlencoded::byte_serialize;
+use url::Url;
 
 pub trait Download {
     /// download file to a folder with given url and path
@@ -46,7 +48,9 @@ impl Download for BlockingReqwest {
         } else {
             client_builder.build().unwrap()
         };
-        let mut resp = reqwest_client.get(url).send()?;
+        let mut url = Url::parse(url).unwrap();
+        encode_huaweicloud_url(&mut url);
+        let mut resp = reqwest_client.get(url.clone()).send()?;
         if resp.status().is_success() {
             // generate parent folder if not exist
             if let Some(parent) = path.parent() {
@@ -58,7 +62,10 @@ impl Download for BlockingReqwest {
             io::copy(&mut resp, &mut out).unwrap();
             tracing::info!("{} {:?}", prefix_msg, out.get_ref());
         } else {
-            tracing::error!("download failed, Please check your url: {}", url);
+            tracing::error!(
+                "download failed, Please check your url: {}",
+                url.to_string()
+            );
             return Ok(false);
         }
         Ok(true)
@@ -139,4 +146,32 @@ pub fn download_and_check_hash(
         }
     }
     br.download_to_folder("&&&[NEW] \t\t ")
+}
+
+pub fn encode_huaweicloud_url(url: &mut Url) {
+    if let Some(domain) = url.domain() {
+        if domain.contains("myhuaweicloud.com") {
+            let mut path = PathBuf::from(url.path());
+            let encode_path: String =
+                byte_serialize(path.file_name().unwrap().to_str().unwrap().as_bytes()).collect();
+            path.pop();
+            path.push(&encode_path);
+            url.set_path(path.to_str().unwrap());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use reqwest::Url;
+
+    use crate::download;
+
+    #[test]
+    fn test_huaweicloud_url_serial() {
+        let mut url = Url::parse("https://rust-proxy.obs.cn-east-3.myhuaweicloud.com/crates/google-coordinate1/google-coordinate1-0.1.1+20141215.crate").unwrap();
+        download::encode_huaweicloud_url(&mut url);
+        assert_eq!(url.to_string(), "https://rust-proxy.obs.cn-east-3.myhuaweicloud.com/crates/google-coordinate1/google-coordinate1-0.1.1%2B20141215.crate");
+    }
 }

@@ -68,9 +68,9 @@ pub fn main(config: &mut Config) -> FreightResult {
 ///
 ///
 fn cli() -> App {
-    let usage = "freight [SUBCOMMAND]";
+    let usage = "freighter [SUBCOMMAND]";
 
-    App::new("freight")
+    App::new("freighter")
         .version("0.1.0")
         .disable_colored_help(true)
         .disable_help_subcommand(true)
@@ -81,18 +81,18 @@ fn cli() -> App {
         )
         .help_template(
             "\
-Freight - A crate registry from the Open Rust Initiative Community
+Freighter - A crate registry from the Open Rust Initiative Community
 
 USAGE:
     {usage}
 
-Some common freight commands are (see all commands with --list):
+Some common freighter commands are (see all commands with --list):
     crates    Sync the index and crate files from the upstream to local, cloud or registry
     rustup    Sync the rustup files from the upstream to local, cloud or registry
     channel   Sync the toolchain files from the upstream to local, cloud or registry
     server    Start git and file http server 
 
-See 'freight help <command>' for more information on a specific command.\n"
+See 'freighter help <command>' for more information on a specific command.\n"
         )
         .subcommands(commands::builtin())
 }

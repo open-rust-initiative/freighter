@@ -100,7 +100,6 @@ mod filters {
             .and_then(|tail: warp::path::Tail, config: Config| async move {
                 handlers::return_files(
                     config.rustup.serve_domains.unwrap(),
-                    format!("{}/{}", "dist", tail.as_str()),
                     config.work_dir.unwrap(),
                     PathBuf::from("dist").join(tail.as_str()),
                     false,
@@ -120,7 +119,6 @@ mod filters {
             .and_then(move |tail: warp::path::Tail, config: Config| async move {
                 handlers::return_files(
                     config.rustup.serve_domains.unwrap(),
-                    format!("{}/{}", "rustup", tail.as_str()),
                     config.work_dir.unwrap(),
                     PathBuf::from("rustup").join(tail.as_str()),
                     false,
@@ -135,19 +133,13 @@ mod filters {
         config: Config,
     ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
         let crates_1 = warp::path!("crates" / String / String / "download")
-            .map(|name: String, version: String| {
-                (
-                    format!("crates/{}/{}/download", &name, &version),
-                    name,
-                    version,
-                )
-            })
+            .map(|name: String, version: String| (name, version))
             .untuple_one();
         let crates_2 = warp::path!("crates" / String / String)
             .map(|name: String, file: String| {
                 let split: Vec<_> = file.split('-').collect();
                 let version = split[split.len() - 1].replace(".crate", "");
-                (format!("crates/{}/{}", &name, &file), name, version)
+                (name, version)
             })
             .untuple_one();
 
@@ -155,21 +147,18 @@ mod filters {
             .or(crates_2)
             .unify()
             .and(with_config(config))
-            .and_then(
-                |url_path: String, name: String, version: String, config: Config| async move {
-                    let file_path = PathBuf::from("crates")
-                        .join(&name)
-                        .join(format!("{}-{}.crate", name, version));
-                    handlers::return_files(
-                        config.crates.serve_domains.unwrap(),
-                        url_path,
-                        config.work_dir.unwrap(),
-                        file_path,
-                        true,
-                    )
-                    .await
-                },
-            )
+            .and_then(|name: String, version: String, config: Config| async move {
+                let file_path = PathBuf::from("crates")
+                    .join(&name)
+                    .join(format!("{}-{}.crate", name, version));
+                handlers::return_files(
+                    config.crates.serve_domains.unwrap(),
+                    config.work_dir.unwrap(),
+                    file_path,
+                    true,
+                )
+                .await
+            })
             .recover(handlers::handle_missing_file)
     }
 
@@ -221,8 +210,9 @@ mod filters {
 }
 
 mod handlers {
-    use std::{borrow::BorrowMut, convert::Infallible, error::Error, path::PathBuf};
+    use std::{borrow::BorrowMut, convert::Infallible, error::Error, path::PathBuf, str::FromStr};
 
+    use reqwest::Url;
     use serde::Serialize;
     use tokio::{fs::File, io::AsyncWriteExt};
     use tokio_util::codec::{BytesCodec, FramedRead};
@@ -235,6 +225,7 @@ mod handlers {
     };
 
     use crate::{
+        download,
         errors::{FreightResult, FreighterError},
         server::file_server::MissingFile,
     };
@@ -258,34 +249,37 @@ mod handlers {
 
     pub async fn return_files(
         serve_domains: Vec<String>,
-        url_path: String,
         work_dir: PathBuf,
         mut file_path: PathBuf,
         is_crates: bool,
     ) -> Result<impl Reply, Rejection> {
-        let full_path = work_dir.join(file_path.clone());
         for domain in serve_domains {
             if domain.eq("localhost") {
+                let full_path = work_dir.join(file_path.clone());
                 tracing::info!("try to fetch file from local: {}", full_path.display());
                 let res = download_local_files(&full_path).await;
                 if res.is_ok() {
                     return res;
                 }
             } else {
-                let mut uri: Uri = format!("{}/{}", domain, url_path).parse().unwrap();
-                if is_crates {
-                    if domain.contains("myhuaweicloud.com") {
-                        let name = file_path.file_name().unwrap().to_str().unwrap();
-                        let encode: String = byte_serialize(name.as_bytes()).collect();
-                        file_path.pop();
-                        file_path.push(encode);
-                        tracing::debug!("file path {:?}, url_path:{:?}", file_path, url_path);
-                    }
-                    uri = format!("{}/{}", domain, file_path.display())
-                        .parse()
-                        .unwrap();
+                // url_path:  crates/name/version/download or crates/name/version
+                // file_path: crates/name/name-version.crate
+                let mut url: Url = format!("{}/{}", domain, file_path.display())
+                    .parse()
+                    .unwrap();
+                if is_crates && domain.contains("myhuaweicloud.com") {
+                    download::encode_huaweicloud_url(&mut url);
+
+                    let name = file_path.file_name().unwrap().to_str().unwrap();
+                    let encode: String = byte_serialize(name.as_bytes()).collect();
+                    file_path.pop();
+                    file_path.push(encode);
+                    tracing::debug!("file path {:?}", file_path);
                 }
-                return Err(reject::custom(MissingFile { uri }));
+                return Ok(
+                    warp::redirect::found(Uri::from_str(url.as_str()).unwrap()).into_response()
+                );
+                // return Err(reject::custom(MissingFile { uri }));
             }
         }
         Err(reject::not_found())

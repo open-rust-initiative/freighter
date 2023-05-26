@@ -70,7 +70,7 @@ mod filters {
 
     use warp::{Filter, Rejection};
 
-    use crate::{config::Config, server::git_protocal::GitCommand};
+    use crate::{config::Config, server::git_protocol::GitCommand};
 
     use super::handlers;
 

@@ -121,7 +121,7 @@ pub fn init_log(config: &LogConfig, work_dir: PathBuf, sub_command: &str) -> Fre
 
     let policy = CompoundPolicy::new(
         Box::new(SizeTrigger::new(config.limit * 1024 * 1024)),
-        Box::new(DeleteRoller::default()),
+        Box::<DeleteRoller>::default(),
     );
 
     let file = RollingFileAppender::builder()

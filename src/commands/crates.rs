@@ -154,7 +154,6 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
             opts.download_mode = DownloadMode::new(args.get_flag("init"), args.get_flag("fix"));
             opts.delete_after_upload = args.get_flag("delete-after-upload");
             opts.crates_name = args.get_one::<String>("name").cloned();
-            // let bucket_name = args.get_one::<String>("bucket").cloned();
             if opts.upload {
                 if let Some(bucket_name) = args.get_one::<String>("bucket").cloned() {
                     opts.bucket_name = bucket_name

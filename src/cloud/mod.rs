@@ -7,7 +7,7 @@ use std::{
     sync::Arc,
 };
 
-use threadpool::ThreadPool;
+use rayon::ThreadPool;
 use walkdir::WalkDir;
 
 use crate::{errors::FreightResult, handler::crates_file::is_not_hidden};
@@ -27,36 +27,35 @@ pub trait CloudStorage {
 
 // this method is used to handle 'uplaod' subcommand for uplaod all files to obs server
 pub fn upload_with_pool(
-    download_threads: usize,
     path: PathBuf,
+    thread_pool: Arc<ThreadPool>,
     bucket_name: String,
     cloud_storage: S3cmd,
 ) -> FreightResult {
-    let pool = ThreadPool::new(download_threads);
     let cloud = Arc::new(cloud_storage);
     let bucket_name = format!(
         "{}/{}",
         bucket_name,
         path.file_name().unwrap().to_str().unwrap()
     );
-    WalkDir::new(path)
-        .min_depth(1)
-        .max_depth(1)
-        .into_iter()
-        .filter_entry(is_not_hidden)
-        .filter_map(|v| v.ok())
-        .for_each(|x| {
-            let bucket_name = bucket_name.clone();
-            let cloud_in = cloud.clone();
-            pool.execute(move || {
-                let path = x.path();
-                cloud_in
-                    .upload_folder(path.to_str().unwrap(), &bucket_name)
-                    .unwrap();
+    thread_pool.scope(|s| {
+        WalkDir::new(path)
+            .min_depth(1)
+            .max_depth(1)
+            .into_iter()
+            .filter_entry(is_not_hidden)
+            .filter_map(|v| v.ok())
+            .for_each(|x| {
+                let bucket_name = bucket_name.clone();
+                let cloud_in = cloud.clone();
+                s.spawn(move |_| {
+                    let path = x.path();
+                    cloud_in
+                        .upload_folder(path.to_str().unwrap(), &bucket_name)
+                        .unwrap();
+                });
             });
-        });
-    pool.join();
-    tracing::info!("sync ends with {} task failed", pool.panic_count());
+    });
     Ok(())
 }
 

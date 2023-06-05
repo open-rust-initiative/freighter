@@ -13,8 +13,11 @@ use std::{
 };
 
 use chrono::{Duration, NaiveDate, Utc};
+use rayon::{
+    prelude::{IntoParallelRefIterator, ParallelIterator},
+    ThreadPool, ThreadPoolBuilder,
+};
 use serde::Deserialize;
-use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
 use crate::{
@@ -51,7 +54,7 @@ pub struct Target {
     pub xz_hash: Option<String>,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct ChannelOptions {
     pub config: RustUpConfig,
 
@@ -73,6 +76,27 @@ pub struct ChannelOptions {
     pub sync_history: bool,
 
     pub init: bool,
+
+    pub thread_pool: Arc<ThreadPool>,
+}
+
+impl Default for ChannelOptions {
+    fn default() -> Self {
+        let thread_pool = Arc::new(ThreadPoolBuilder::new().build().unwrap());
+        ChannelOptions {
+            thread_pool,
+            config: RustUpConfig::default(),
+            proxy: ProxyConfig::default(),
+            clean: false,
+            version: None,
+            dist_path: PathBuf::default(),
+            bucket: None,
+            upload: false,
+            delete_after_upload: false,
+            sync_history: false,
+            init: false,
+        }
+    }
 }
 
 /// entrance function
@@ -153,47 +177,54 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
                 tracing::error!("skipping channel: {}", channel);
                 return Ok(());
             }
-            let pool = ThreadPool::new(opts.config.download_threads);
             // parse_channel_file and download;
             let download_list = parse_channel_file(channel_toml).unwrap();
             let s3cmd = Arc::new(S3cmd::default());
-            download_list.into_iter().for_each(|(url, hash)| {
-                // example: https://static.rust-lang.org/dist/2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi
-                // these code was used to remove url prefix "https://static.rust-lang.org/dist"
-                // and get "2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi"
-                let path: PathBuf = std::iter::once(opts.dist_path.to_owned())
-                    .chain(
-                        url.split('/').map(PathBuf::from).collect::<Vec<PathBuf>>()[4..].to_owned(),
-                    )
-                    .collect();
-                let (upload, dist_path, bucket, delete_after_upload) = (
-                    opts.upload,
-                    opts.dist_path.to_owned(),
-                    opts.bucket.to_owned(),
-                    opts.delete_after_upload,
-                );
-                let s3cmd = s3cmd.clone();
-                let proxy = opts.proxy.clone();
-                pool.execute(move || {
-                    let down_opts = &DownloadOptions { proxy, url, path };
-                    let path = &down_opts.path;
-                    let downloaded =
-                        download_and_check_hash(down_opts, Some(&hash), false).unwrap();
-                    if downloaded && upload {
-                        let s3_path = format!(
-                            "dist{}",
-                            path.to_str()
-                                .unwrap()
-                                .replace(dist_path.to_str().unwrap(), "")
-                        );
-                        let uploaded = s3cmd.upload_file(path, &s3_path, &bucket.unwrap());
-                        if uploaded.is_ok() && delete_after_upload {
-                            fs::remove_file(path).unwrap();
+            opts.thread_pool.scope(|s| {
+                download_list.par_iter().for_each(|(url, hash)| {
+                    // example: https://static.rust-lang.org/dist/2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi
+                    // these code was used to remove url prefix "https://static.rust-lang.org/dist"
+                    // and get "2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi"
+                    let path: PathBuf = std::iter::once(opts.dist_path.to_owned())
+                        .chain(
+                            url.split('/').map(PathBuf::from).collect::<Vec<PathBuf>>()[4..]
+                                .to_owned(),
+                        )
+                        .collect();
+                    let (upload, dist_path, bucket, delete_after_upload) = (
+                        opts.upload,
+                        opts.dist_path.to_owned(),
+                        opts.bucket.to_owned(),
+                        opts.delete_after_upload,
+                    );
+                    let s3cmd = s3cmd.clone();
+                    let proxy = opts.proxy.clone();
+
+                    s.spawn(move |_| {
+                        let down_opts = &DownloadOptions {
+                            proxy,
+                            url: url.to_string(),
+                            path,
+                        };
+                        let path = &down_opts.path;
+                        let downloaded =
+                            download_and_check_hash(down_opts, Some(&hash), false).unwrap();
+                        if downloaded && upload {
+                            let s3_path = format!(
+                                "dist{}",
+                                path.to_str()
+                                    .unwrap()
+                                    .replace(dist_path.to_str().unwrap(), "")
+                            );
+                            let uploaded = s3cmd.upload_file(path, &s3_path, &bucket.unwrap());
+                            if uploaded.is_ok() && delete_after_upload {
+                                fs::remove_file(path).unwrap();
+                            }
                         }
-                    }
+                    });
                 });
             });
-            pool.join();
+
             replace_toml_and_sha(opts, s3cmd, channel_toml);
         }
         Err(_err) => {

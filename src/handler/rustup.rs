@@ -5,9 +5,8 @@
 //!
 //!
 
-use std::path::PathBuf;
-
-use threadpool::ThreadPool;
+use rayon::{ThreadPool, ThreadPoolBuilder};
+use std::{path::PathBuf, sync::Arc};
 
 use crate::{
     config::ProxyConfig,
@@ -48,13 +47,27 @@ const PLATFORMS: &[&str] = &[
     "x86_64-pc-windows-msvc",
 ];
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct RustUpOptions {
     pub config: RustUpConfig,
 
     pub proxy: ProxyConfig,
 
     pub rustup_path: PathBuf,
+
+    pub thread_pool: Arc<ThreadPool>,
+}
+
+impl Default for RustUpOptions {
+    fn default() -> Self {
+        let thread_pool = Arc::new(ThreadPoolBuilder::new().build().unwrap());
+        RustUpOptions {
+            thread_pool,
+            config: RustUpConfig::default(),
+            proxy: ProxyConfig::default(),
+            rustup_path: PathBuf::default(),
+        }
+    }
 }
 
 /// entrance function
@@ -68,23 +81,24 @@ pub fn sync_rustup_init(opts: &RustUpOptions) -> FreightResult {
     };
 
     download_and_check_hash(down_opts, None, true).unwrap();
-    let pool = ThreadPool::new(opts.config.download_threads);
-    PLATFORMS.iter().for_each(|platform| {
-        let rustup_path = opts.rustup_path.clone();
-        let file_name = if platform.contains("windows") {
-            "rustup-init.exe".to_owned()
-        } else {
-            "rustup-init".to_owned()
-        };
-        let domain = opts.config.domain.clone();
-        let proxy = opts.proxy.clone();
-        pool.execute(move || {
-            let download_url = format!("{}/rustup/dist/{}/{}", domain, platform, file_name);
-            let folder = rustup_path.join("dist").join(platform);
-            download_file_with_sha(&download_url, &folder, &file_name, &proxy).unwrap();
+
+    opts.thread_pool.scope(|s| {
+        PLATFORMS.iter().for_each(|platform| {
+            let rustup_path = opts.rustup_path.clone();
+            let file_name = if platform.contains("windows") {
+                "rustup-init.exe".to_owned()
+            } else {
+                "rustup-init".to_owned()
+            };
+            let domain = opts.config.domain.clone();
+            let proxy = opts.proxy.clone();
+            s.spawn(move |_| {
+                let download_url = format!("{}/rustup/dist/{}/{}", domain, platform, file_name);
+                let folder = rustup_path.join("dist").join(platform);
+                download_file_with_sha(&download_url, &folder, &file_name, &proxy).unwrap();
+            });
         });
     });
-    pool.join();
 
     Ok(())
 }

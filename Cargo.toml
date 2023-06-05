@@ -16,22 +16,21 @@ description = """
 [dependencies]
 anyhow = "1.0.66"
 thiserror = "1.0.36"
-clap = "4.0.29"
-git2 = "0.17.1"
+clap = "4.3.1"
+git2 = "0.17.2"
 git2-curl = "0.18"
 url = "2.3.1"
 serde = { version = "1.0.159", features = ["derive"] }
 serde_json = "1.0.96"
 walkdir = "2.3.2"
 reqwest = { version = "0.11.13", features = ["blocking"] }
-openssl = { version = "0.10.45", features = ["vendored"] }
-chrono = "0.4.22"
+openssl = { version = "0.10.54", features = ["vendored"] }
+chrono = "0.4.26"
 sha2 = "0.10.6"
-threadpool = "1.8.1"
 dirs = "5.0.0"
 toml = "0.7.1"
 log4rs = {version = "1.2.0", features = ["toml_format"] }
-tokio = { version = "1.22.0", features = ["full"] }
+tokio = { version = "1.28.2", features = ["full"] }
 warp = { version = "0.3.3", features = ["tls"] }
 tokio-util = { version = "0.7.4", features = ["codec"] }
 tracing = "0.1"
@@ -39,6 +38,7 @@ tracing-subscriber = "0.3.17"
 bytes = "1.1.0"
 async-trait = "0.1.64"
 tokio-test = "0.4.2"
+rayon = "1.7.0"
 
 
 [dev-dependencies]

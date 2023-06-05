@@ -40,7 +40,10 @@
 //!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param before upload.
 //!   
 
+use std::sync::Arc;
+
 use clap::{arg, ArgMatches};
+use rayon::ThreadPoolBuilder;
 
 use crate::cloud;
 use crate::cloud::s3::S3cmd;
@@ -126,6 +129,13 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         opts.config.download_threads = download_threads;
     };
 
+    opts.thread_pool = Arc::new(
+        ThreadPoolBuilder::new()
+            .num_threads(opts.config.download_threads)
+            .build()
+            .unwrap(),
+    );
+
     tracing::info!("Default ChannelOptions : {:#?}", opts);
 
     match args.subcommand() {
@@ -148,13 +158,7 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         Some(("upload", args)) => {
             let bucket_name = args.get_one::<String>("bucket").cloned().unwrap();
             let s3cmd = S3cmd::default();
-            cloud::upload_with_pool(
-                opts.config.download_threads,
-                opts.dist_path,
-                bucket_name,
-                s3cmd,
-            )
-            .unwrap();
+            cloud::upload_with_pool(opts.dist_path, opts.thread_pool, bucket_name, s3cmd).unwrap();
         }
         Some((cmd, _)) => {
             unreachable!("unexpected command {}", cmd)

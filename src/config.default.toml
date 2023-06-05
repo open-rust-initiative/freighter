@@ -42,7 +42,7 @@ domain = "https://static.rust-lang.org"
 # Number of rust toolchain download threads
 download_threads = 16
 
-# stable version that you want to keep forever
+# stable versions that you want to sync with
 sync_stable_versions = [
     "1.9",
     "1.10",
@@ -128,6 +128,11 @@ sync_stable_versions = [
     "1.66.1",
     "1.67",
     "1.67.1",
+    "1.68",
+    "1.68.1",
+    "1.68.2",
+    "1.69",
+    "1.70"
 ]
 
 # days you want to keep for historical nightly version

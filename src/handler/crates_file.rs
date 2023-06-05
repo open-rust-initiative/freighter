@@ -13,9 +13,9 @@ use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::str;
 use std::sync::{Arc, Mutex};
-use threadpool::ThreadPool;
 
 use chrono::Utc;
+use rayon::{Scope, ThreadPool, ThreadPoolBuilder};
 use serde::{Deserialize, Serialize};
 use walkdir::{DirEntry, WalkDir};
 
@@ -30,7 +30,7 @@ use super::index::CrateIndex;
 use super::DownloadMode;
 
 /// CratesOptions preserve the sync subcommand config
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug)]
 pub struct CratesOptions {
     pub config: CratesConfig,
 
@@ -48,6 +48,7 @@ pub struct CratesOptions {
 
     pub crates_path: PathBuf,
 
+    // handle a single crate with name
     pub crates_name: Option<String>,
 
     pub log_path: PathBuf,
@@ -55,6 +56,28 @@ pub struct CratesOptions {
     pub bucket_name: String,
 
     pub delete_after_upload: bool,
+
+    pub thread_pool: Arc<ThreadPool>,
+}
+
+impl Default for CratesOptions {
+    fn default() -> Self {
+        let thread_pool = Arc::new(ThreadPoolBuilder::new().build().unwrap());
+        CratesOptions {
+            thread_pool,
+            config: CratesConfig::default(),
+            proxy: ProxyConfig::default(),
+            index: CrateIndex::default(),
+            no_progressbar: false,
+            download_mode: DownloadMode::default(),
+            upload: false,
+            crates_path: PathBuf::default(),
+            crates_name: None,
+            log_path: PathBuf::default(),
+            bucket_name: String::default(),
+            delete_after_upload: false,
+        }
+    }
 }
 
 impl CratesOptions {
@@ -140,25 +163,24 @@ pub fn download(opts: &CratesOptions) -> FreightResult {
 ///   URL_s3_fallback: "https://crates-io-fallback.s3-eu-west-1.amazonaws.com/crates/{crate}/{crate}-{version}.crate"
 /// ```
 pub fn full_downloads(opts: &CratesOptions) -> FreightResult {
-    let pool = ThreadPool::new(opts.config.download_threads);
     let err_record = open_file_with_mutex(&opts.log_path);
-
-    WalkDir::new(&opts.index.path)
-        .into_iter()
-        .filter_entry(is_not_hidden)
-        .filter_map(|v| v.ok())
-        .for_each(|x| {
-            if x.file_type().is_file() && x.path().extension().unwrap_or_default() != "json" {
-                parse_index_and_download(&x.path().to_path_buf(), opts, &pool, &err_record)
-                    .unwrap();
-            }
-        });
-    pool.join();
-    tracing::info!("sync ends with {} task failed", pool.panic_count());
+    opts.thread_pool.scope(|s| {
+        WalkDir::new(&opts.index.path)
+            .into_iter()
+            .filter_entry(is_not_hidden)
+            .filter_map(|v| v.ok())
+            .for_each(|x| {
+                if x.file_type().is_file() && x.path().extension().unwrap_or_default() != "json" {
+                    parse_index_and_download(&x.path().to_path_buf(), opts, s, &err_record)
+                        .unwrap();
+                }
+            });
+    });
     Ok(())
 }
 
 pub fn incremental_download(opts: &CratesOptions) -> FreightResult {
+    tracing::info!("{:?}", opts.thread_pool);
     let it = WalkDir::new(&opts.log_path)
         .into_iter()
         .filter_entry(|e| {
@@ -199,39 +221,40 @@ pub fn incremental_download(opts: &CratesOptions) -> FreightResult {
 
 /// fix the previous error download crates
 pub fn fix_download(opts: &CratesOptions) -> FreightResult {
-    let pool = ThreadPool::new(opts.config.download_threads);
     let file_name = &opts.log_path.join("error-crates.log");
 
     let mut visited: HashSet<String> = HashSet::new();
     let err_record_with_mutex = open_file_with_mutex(&opts.log_path);
-    if opts.crates_name.is_some() {
-        let index_path = opts.get_index_path(&opts.crates_name.clone().unwrap());
-        parse_index_and_download(&index_path, opts, &pool, &err_record_with_mutex).unwrap();
-    } else {
-        let err_record = OpenOptions::new().read(true).open(file_name).unwrap();
-        let buffered = BufReader::new(err_record);
-        for line in buffered.lines() {
-            let line = line.unwrap();
-            let c: ErrorCrate = serde_json::from_str(&line).unwrap();
-            let ErrorCrate {
-                name,
-                vers,
-                time: _,
-            } = c;
-            if !visited.contains(&name) {
-                let index_path = opts.get_index_path(&name);
-                parse_index_and_download(&index_path, opts, &pool, &err_record_with_mutex).unwrap();
-                visited.insert(name.to_owned());
-                tracing::info!("handle success: {}-{}", &name, &vers);
-            } else {
-                // skipping visited
-                tracing::info!("skip different verion of same crates: {}-{}", &name, &vers);
+
+    opts.thread_pool.scope(|s| {
+        if opts.crates_name.is_some() {
+            let index_path = opts.get_index_path(&opts.crates_name.clone().unwrap());
+            parse_index_and_download(&index_path, opts, s, &err_record_with_mutex).unwrap();
+        } else {
+            let err_record = OpenOptions::new().read(true).open(file_name).unwrap();
+            let buffered = BufReader::new(err_record);
+            for line in buffered.lines() {
+                let line = line.unwrap();
+                let c: ErrorCrate = serde_json::from_str(&line).unwrap();
+                let ErrorCrate {
+                    name,
+                    vers,
+                    time: _,
+                } = c;
+                if !visited.contains(&name) {
+                    let index_path = opts.get_index_path(&name);
+                    parse_index_and_download(&index_path, opts, s, &err_record_with_mutex).unwrap();
+                    visited.insert(name.to_owned());
+                    tracing::info!("handle success: {}-{}", &name, &vers);
+                } else {
+                    // skipping visited
+                    tracing::info!("skip different verion of same crates: {}-{}", &name, &vers);
+                }
             }
         }
-    }
-    pool.join();
-    tracing::info!("sync ends with {} task failed", pool.panic_count());
-    if opts.crates_name.is_none() && pool.panic_count() == 0 {
+    });
+
+    if opts.crates_name.is_none() {
         fs::remove_file(file_name).unwrap();
     }
     Ok(())
@@ -241,8 +264,8 @@ pub fn upload_to_s3(opts: &CratesOptions) -> FreightResult {
     let s3cmd = S3cmd::default();
     if opts.crates_name.is_none() {
         cloud::upload_with_pool(
-            opts.config.download_threads,
             opts.crates_path.clone(),
+            opts.thread_pool.clone(),
             opts.bucket_name.clone(),
             s3cmd,
         )
@@ -283,7 +306,7 @@ pub fn is_not_hidden(entry: &DirEntry) -> bool {
 pub fn parse_index_and_download(
     index_path: &PathBuf,
     opts: &CratesOptions,
-    pool: &ThreadPool,
+    scope: &Scope,
     err_record: &Arc<Mutex<File>>,
 ) -> FreightResult {
     match File::open(index_path) {
@@ -306,7 +329,7 @@ pub fn parse_index_and_download(
                     .join(&c.name)
                     .join(format!("{}-{}.crate", &c.name, &c.vers));
 
-                pool.execute(move || {
+                scope.spawn(move |_| {
                     download_crates_with_log(file, &opts, url, c, err_record).unwrap();
                 });
             }

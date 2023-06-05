@@ -49,7 +49,10 @@
 //!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param before upload.
 //!  
 
+use std::sync::Arc;
+
 use clap::{arg, ArgMatches};
+use rayon::ThreadPoolBuilder;
 
 use crate::commands::command_prelude::*;
 use crate::config::Config;
@@ -139,6 +142,12 @@ pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
         Some(download_threads) => opts.config.download_threads = download_threads,
         None => tracing::info!("use default thread count: {}", opts.config.download_threads),
     };
+    opts.thread_pool = Arc::new(
+        ThreadPoolBuilder::new()
+            .num_threads(opts.config.download_threads)
+            .build()
+            .unwrap(),
+    );
 
     tracing::info!("CratesOptions info : {:#?}", opts);
 

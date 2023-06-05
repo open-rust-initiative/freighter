@@ -21,7 +21,6 @@ use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::str;
 use std::sync::{Arc, Mutex};
-use threadpool::ThreadPool;
 
 use crate::errors::FreightResult;
 
@@ -285,24 +284,16 @@ pub fn git2_diff(
         t2.unwrap().as_tree(),
         Some(&mut opts),
     )?;
-    let pool = ThreadPool::new(options.config.download_threads);
 
     diff.print(DiffFormat::NameOnly, |_d, _h, l| {
-        handle_diff_line(l, options, &pool, &file)
+        handle_diff_line(l, options, &file)
     })?;
-
-    pool.join();
 
     Ok(())
 }
 
 /// Traversing directories in diff lines
-fn handle_diff_line(
-    line: DiffLine,
-    opts: &CratesOptions,
-    pool: &ThreadPool,
-    err_record: &Arc<Mutex<File>>,
-) -> bool {
+fn handle_diff_line(line: DiffLine, opts: &CratesOptions, err_record: &Arc<Mutex<File>>) -> bool {
     let path_suffix = str::from_utf8(line.content())
         .unwrap()
         .strip_suffix('\n')
@@ -311,7 +302,9 @@ fn handle_diff_line(
         return true;
     }
     let index_path = opts.index.path.join(path_suffix);
-    parse_index_and_download(&index_path, opts, pool, err_record).unwrap();
+    opts.thread_pool.scope(|s| {
+        parse_index_and_download(&index_path, opts, s, &err_record).unwrap();
+    });
     true
 }
 

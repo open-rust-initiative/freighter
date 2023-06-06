@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex};
 use chrono::Utc;
 use rayon::{Scope, ThreadPool, ThreadPoolBuilder};
 use serde::{Deserialize, Serialize};
+use url::Url;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::cloud::s3::S3cmd;
@@ -319,10 +320,10 @@ pub fn parse_index_and_download(
                 let err_record = Arc::clone(err_record);
                 let opts = opts.clone();
 
-                let url = format!(
+                let url = Url::parse(&format!(
                     "{}/{}/{}-{}.crate",
                     opts.config.domain, &c.name, &c.name, &c.vers
-                );
+                )).unwrap();
 
                 let file = opts
                     .crates_path
@@ -350,7 +351,7 @@ pub fn parse_index_and_download(
 pub fn download_crates_with_log(
     path: PathBuf,
     opts: &CratesOptions,
-    url: String,
+    url: Url,
     c: Crate,
     err_record: Arc<Mutex<File>>,
 ) -> FreightResult {

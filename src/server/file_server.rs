@@ -6,7 +6,7 @@
 //!
 
 use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, SocketAddr},
     path::PathBuf,
 };
 
@@ -24,8 +24,8 @@ impl Reject for MissingFile {}
 pub struct FileServer {
     pub cert_path: Option<PathBuf>,
     pub key_path: Option<PathBuf>,
-    pub addr: Option<IpAddr>,
-    pub port: Option<u16>,
+    pub addr: IpAddr,
+    pub port: u16,
 }
 
 /// start server
@@ -45,7 +45,7 @@ pub async fn start(config: &Config, file_server: &FileServer) {
 
     match (cert_path, key_path) {
         (Some(cert_path), Some(key_path)) => {
-            let socket_addr = parse_ipaddr(addr, port, true);
+            let socket_addr = SocketAddr::new(addr, port);
             warp::serve(routes)
                 .tls()
                 .cert_path(cert_path)
@@ -54,7 +54,7 @@ pub async fn start(config: &Config, file_server: &FileServer) {
                 .await;
         }
         (None, None) => {
-            let socket_addr = parse_ipaddr(addr, port, false);
+            let socket_addr = SocketAddr::new(addr, port);
             warp::serve(routes).run(socket_addr).await
         }
         (Some(_), None) => {
@@ -369,14 +369,4 @@ mod handlers {
         }
         Ok(())
     }
-}
-
-/// parse address with ip and port
-fn parse_ipaddr(listen: Option<IpAddr>, port: Option<u16>, use_ssl: bool) -> SocketAddr {
-    let listen = listen.unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
-    let mut port = port.unwrap_or(8080);
-    if use_ssl {
-        port = 443;
-    }
-    SocketAddr::new(listen, port)
 }

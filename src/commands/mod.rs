@@ -13,7 +13,7 @@ use crate::errors::FreightResult;
 pub mod channel;
 pub mod command_prelude;
 pub mod crates;
-pub mod rustup;
+pub mod rustup_init;
 pub mod server;
 
 /// The builtin function is the entry point of commands mod. Each subcommand is a
@@ -25,7 +25,7 @@ pub mod server;
 /// point and the `exec` function is logic entry.
 ///
 pub fn builtin() -> Vec<App> {
-    vec![crates::cli(), rustup::cli(), channel::cli(), server::cli()]
+    vec![crates::cli(), rustup_init::cli(), channel::cli(), server::cli()]
 }
 
 ///
@@ -34,7 +34,7 @@ pub fn builtin() -> Vec<App> {
 pub fn builtin_exec(cmd: &str) -> Option<fn(&mut Config, &ArgMatches) -> FreightResult> {
     let f = match cmd {
         "crates" => crates::exec,
-        "rustup" => rustup::exec,
+        "rustup" => rustup_init::exec,
         "channel" => channel::exec,
         "server" => server::exec,
         _ => return None,

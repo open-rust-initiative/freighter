@@ -303,7 +303,7 @@ fn handle_diff_line(line: DiffLine, opts: &CratesOptions, err_record: &Arc<Mutex
     }
     let index_path = opts.index.path.join(path_suffix);
     opts.thread_pool.scope(|s| {
-        parse_index_and_download(&index_path, opts, s, &err_record).unwrap();
+        parse_index_and_download(&index_path, opts, s, err_record).unwrap();
     });
     true
 }

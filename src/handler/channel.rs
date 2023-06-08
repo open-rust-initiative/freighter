@@ -18,6 +18,7 @@ use rayon::{
     ThreadPool, ThreadPoolBuilder,
 };
 use serde::Deserialize;
+use url::Url;
 use walkdir::WalkDir;
 
 use crate::{
@@ -180,7 +181,7 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
             // parse_channel_file and download;
             let download_list = parse_channel_file(channel_toml).unwrap();
             let s3cmd = Arc::new(S3cmd::default());
-            opts.thread_pool.scope(|s| {
+            opts.thread_pool.install(|| {
                 download_list.par_iter().for_each(|(url, hash)| {
                     // example: https://static.rust-lang.org/dist/2022-11-03/rust-1.65.0-i686-pc-windows-gnu.msi
                     // these code was used to remove url prefix "https://static.rust-lang.org/dist"
@@ -197,31 +198,30 @@ pub fn sync_channel(opts: &ChannelOptions, channel: &str) -> FreightResult {
                         opts.bucket.to_owned(),
                         opts.delete_after_upload,
                     );
-                    let s3cmd = s3cmd.clone();
-                    let proxy = opts.proxy.clone();
 
-                    s.spawn(move |_| {
-                        let down_opts = &DownloadOptions {
-                            proxy,
-                            url: url.to_string(),
-                            path,
-                        };
-                        let path = &down_opts.path;
-                        let downloaded =
-                            download_and_check_hash(down_opts, Some(&hash), false).unwrap();
-                        if downloaded && upload {
-                            let s3_path = format!(
-                                "dist{}",
-                                path.to_str()
-                                    .unwrap()
-                                    .replace(dist_path.to_str().unwrap(), "")
-                            );
-                            let uploaded = s3cmd.upload_file(path, &s3_path, &bucket.unwrap());
-                            if uploaded.is_ok() && delete_after_upload {
-                                fs::remove_file(path).unwrap();
-                            }
+                    let mut url = Url::parse(url).unwrap();
+                    url.set_host(Url::parse(&opts.config.domain).unwrap().host_str())
+                        .unwrap();
+
+                    let down_opts = &DownloadOptions {
+                        proxy: opts.proxy.clone(),
+                        url,
+                        path,
+                    };
+                    let path = &down_opts.path;
+                    let downloaded = download_and_check_hash(down_opts, Some(hash), false).unwrap();
+                    if downloaded && upload {
+                        let s3_path = format!(
+                            "dist{}",
+                            path.to_str()
+                                .unwrap()
+                                .replace(dist_path.to_str().unwrap(), "")
+                        );
+                        let uploaded = s3cmd.upload_file(path, &s3_path, &bucket.unwrap());
+                        if uploaded.is_ok() && delete_after_upload {
+                            fs::remove_file(path).unwrap();
                         }
-                    });
+                    };
                 });
             });
 

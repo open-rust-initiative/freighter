@@ -25,15 +25,14 @@ pub trait Download {
 }
 
 /// use reqwest to handle https download requests
-#[derive(Default)]
 pub struct BlockingReqwest {
     pub opts: DownloadOptions,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct DownloadOptions {
     pub proxy: ProxyConfig,
-    pub url: String,
+    pub url: Url,
     pub path: PathBuf,
 }
 
@@ -48,7 +47,7 @@ impl Download for BlockingReqwest {
         } else {
             client_builder.build().unwrap()
         };
-        let mut url = Url::parse(url).unwrap();
+        let mut url = url.clone();
         encode_huaweicloud_url(&mut url);
         let mut resp = reqwest_client.get(url.clone()).send()?;
         if resp.status().is_success() {
@@ -85,7 +84,7 @@ pub fn download_file_with_sha(
     //always update sha256 file
     let down_sha = &DownloadOptions {
         proxy: proxy.clone(),
-        url: sha_url,
+        url: Url::parse(&sha_url).unwrap(),
         path: sha_path,
     };
     let res = download_and_check_hash(down_sha, None, true).unwrap();
@@ -94,7 +93,7 @@ pub fn download_file_with_sha(
         let sha256 = &content[..64];
         let down_file = &DownloadOptions {
             proxy: proxy.clone(),
-            url: url.to_owned(),
+            url: Url::parse(url).unwrap(),
             path: file_folder.join(file_name),
         };
         download_and_check_hash(down_file, Some(sha256), false)
@@ -115,11 +114,7 @@ pub fn download_and_check_hash(
     let br = BlockingReqwest {
         opts: opts.to_owned(),
     };
-    let DownloadOptions {
-        proxy: _,
-        url: _,
-        path,
-    } = opts;
+    let path = &opts.path;
     if path.is_file() && path.exists() {
         let mut hasher = Sha256::new();
         let mut file = File::open(path)?;
@@ -150,7 +145,7 @@ pub fn download_and_check_hash(
 
 pub fn encode_huaweicloud_url(url: &mut Url) {
     if let Some(domain) = url.domain() {
-        if domain.contains("myhuaweicloud.com") {
+        if domain.contains("myhuaweicloud.com") && url.path().starts_with("/crates"){
             let mut path = PathBuf::from(url.path());
             let encode_path: String =
                 byte_serialize(path.file_name().unwrap().to_str().unwrap().as_bytes()).collect();
@@ -173,5 +168,10 @@ mod tests {
         let mut url = Url::parse("https://rust-proxy.obs.cn-east-3.myhuaweicloud.com/crates/google-coordinate1/google-coordinate1-0.1.1+20141215.crate").unwrap();
         download::encode_huaweicloud_url(&mut url);
         assert_eq!(url.to_string(), "https://rust-proxy.obs.cn-east-3.myhuaweicloud.com/crates/google-coordinate1/google-coordinate1-0.1.1%2B20141215.crate");
+
+        // Skip routes that don't start with /crates
+        let mut url = Url::parse("https://rust-proxy.obs.cn-east-3.myhuaweicloud.com/dist/2023-06-05/google-coordinate1-0.1.1+20141215.crate").unwrap();
+        download::encode_huaweicloud_url(&mut url);
+        assert_eq!(url.to_string(), "https://rust-proxy.obs.cn-east-3.myhuaweicloud.com/dist/2023-06-05/google-coordinate1-0.1.1+20141215.crate");
     }
 }

@@ -32,9 +32,9 @@ use crate::server::file_server::{self, FileServer};
 
 pub fn cli() -> clap::Command {
     clap::Command::new("server")
-        .arg(arg!(-i --"ip" <VALUE> "specify the ip address").value_parser(value_parser!(IpAddr)))
+        .arg(arg!(-i --"ip" <VALUE> "spcify the ip address").value_parser(value_parser!(IpAddr)).default_value("127.0.0.1"))
         .arg(
-            arg!(-p --"port" <VALUE> "specify the listening port").value_parser(value_parser!(u16)),
+            arg!(-p --"port" <VALUE> "specify the listening port").value_parser(value_parser!(u16)).default_value("8000"),
         )
         .arg(
             arg!(-c --"cert-path" <VALUE> "Path to a TLS certificate file")
@@ -44,7 +44,6 @@ pub fn cli() -> clap::Command {
             arg!(-k --"key-path" <VALUE> "Path to a TLS key file")
                 .value_parser(value_parser!(PathBuf)),
         )
-        .arg_required_else_help(true)
         .about("Start git and file proxy server")
         .help_template(
             "\
@@ -74,8 +73,8 @@ EXAMPLES
 ///
 ///
 pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
-    let addr: Option<IpAddr> = args.get_one::<IpAddr>("ip").cloned();
-    let port: Option<u16> = args.get_one::<u16>("port").cloned();
+    let addr: IpAddr = args.get_one::<IpAddr>("ip").cloned().unwrap();
+    let port: u16 = args.get_one::<u16>("port").cloned().unwrap();
     let cert_path: Option<PathBuf> = args.get_one::<PathBuf>("cert-path").cloned();
     let key_path: Option<PathBuf> = args.get_one::<PathBuf>("key-path").cloned();
 

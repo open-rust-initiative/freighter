@@ -6,6 +6,7 @@
 //!
 
 use rayon::{ThreadPool, ThreadPoolBuilder};
+use url::Url;
 use std::{path::PathBuf, sync::Arc};
 
 use crate::{
@@ -76,7 +77,7 @@ pub fn sync_rustup_init(opts: &RustUpOptions) -> FreightResult {
     let file = opts.rustup_path.join("release-stable.toml");
     let down_opts = &DownloadOptions {
         proxy: opts.proxy.clone(),
-        url: download_url,
+        url: Url::parse(&download_url).unwrap(),
         path: file,
     };
 

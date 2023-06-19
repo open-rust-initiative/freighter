@@ -28,7 +28,7 @@ use crate::errors::FreightResult;
 use crate::handler::index;
 
 use super::index::CrateIndex;
-use super::DownloadMode;
+use super::{utils, DownloadMode};
 
 /// CratesOptions preserve the sync subcommand config
 #[derive(Clone, Debug)]
@@ -84,11 +84,7 @@ impl Default for CratesOptions {
 impl CratesOptions {
     // the path rules of craes index file
     pub fn get_index_path(&self, name: &str) -> PathBuf {
-        let suffix = match name.len() {
-            1..=2 => format!("{}/{}", name.len(), name),
-            3 => format!("{}/{}/{}", name.len(), &name[0..1], name),
-            _ => format!("{}/{}/{}", &name[0..2], &name[2..4], name),
-        };
+        let suffix = utils::index_suffix(name);
         self.index.path.join(suffix)
     }
 }
@@ -323,7 +319,8 @@ pub fn parse_index_and_download(
                 let url = Url::parse(&format!(
                     "{}/{}/{}-{}.crate",
                     opts.config.domain, &c.name, &c.name, &c.vers
-                )).unwrap();
+                ))
+                .unwrap();
 
                 let file = opts
                     .crates_path

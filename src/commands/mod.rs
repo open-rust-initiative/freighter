@@ -25,7 +25,12 @@ pub mod server;
 /// point and the `exec` function is logic entry.
 ///
 pub fn builtin() -> Vec<App> {
-    vec![crates::cli(), rustup_init::cli(), channel::cli(), server::cli()]
+    vec![
+        crates::cli(),
+        rustup_init::cli(),
+        channel::cli(),
+        server::cli(),
+    ]
 }
 
 ///

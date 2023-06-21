@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -23,7 +25,7 @@ pub struct CratesPublish {
     // Each feature maps to an array of features or dependencies it enables.
     // Cargo does not impose limitations on feature names, but crates.io
     // requires alphanumeric ASCII, `_` or `-` characters.
-    pub features: Feature,
+    pub features: BTreeMap<String, Vec<String>>,
     // String of the URL to the website for this package's home page.
     // May be null.
     pub homepage: String,
@@ -86,11 +88,6 @@ pub struct Dep {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Badge {}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Feature {
-    // pub extras: Vec<String>,
-}
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct PublishRsp {

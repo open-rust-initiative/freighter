@@ -32,6 +32,7 @@ pub struct FileServer {
 #[tokio::main]
 pub async fn start(config: &Config, file_server: &FileServer) {
     tracing_subscriber::fmt::init();
+    // storage::init().await;
     let routes = filters::build_route(config.to_owned())
         .recover(handlers::handle_rejection)
         .with(warp::trace::request());
@@ -115,12 +116,18 @@ mod filters {
 
                 let parse_result = serde_json::from_slice::<CratesPublish>(json.as_ref());
                 let crate_len = utils::get_usize_from_bytes(body.copy_to_bytes(4));
-                let _file_content = body.copy_to_bytes(crate_len);
+                let file_content = body.copy_to_bytes(crate_len);
 
                 match parse_result {
                     Ok(result) => {
                         println!("JSON: {:?}", result);
-                        utils::save_crate_index(result, config.work_dir.unwrap());
+                        let work_dir = config.work_dir.unwrap();
+                        utils::save_crate_index(
+                            &result,
+                            &file_content,
+                            work_dir.join("crates.io-index"),
+                        );
+                        utils::save_crate_file(&result, &file_content, work_dir.join("crates"));
                         // let std::fs::write();
                         // 1.verify name and version from local db
                         // 2.call remote server to check info in crates.io
@@ -430,11 +437,14 @@ mod handlers {
 }
 
 mod utils {
-    use std::path::PathBuf;
+    use std::{fs, path::PathBuf};
 
+    use crate::{
+        handler::{crates_file::IndexFile, utils},
+        server::model::CratesPublish,
+    };
     use bytes::Bytes;
-
-    use crate::{handler::utils, server::model::CratesPublish};
+    use sha2::{Digest, Sha256};
 
     pub fn get_usize_from_bytes(bytes: Bytes) -> usize {
         let mut fixed_array = [0u8; 8];
@@ -442,9 +452,25 @@ mod utils {
         usize::from_le_bytes(fixed_array)
     }
 
-    pub fn save_crate_index(json: CratesPublish, work_dir: PathBuf) {
-        let crates_name = json.name;
-        let suffix = utils::index_suffix(&crates_name);
-        let _index_path = work_dir.join(suffix);
+    pub fn save_crate_index(json: &CratesPublish, content: &Bytes, work_dir: PathBuf) {
+        let suffix = utils::index_suffix(&json.name);
+        let index_path = work_dir.join(suffix);
+        //convert publish json to index file
+        let mut index_file: IndexFile =
+            serde_json::from_str(&serde_json::to_string(&json).unwrap()).unwrap();
+
+        let mut hasher = Sha256::new();
+        hasher.update(content);
+        index_file.cksum = Some(format!("{:x}", hasher.finalize()));
+        fs::write(index_path, serde_json::to_string(&index_file).unwrap()).unwrap();
+    }
+
+    pub fn save_crate_file(json: &CratesPublish, content: &Bytes, work_dir: PathBuf) {
+        let crates_dir = work_dir.join(&json.name);
+        if !crates_dir.exists() {
+            fs::create_dir_all(&crates_dir).unwrap();
+        }
+        let crates_file = crates_dir.join(format!("{}-{}.crate", json.name, json.vers));
+        fs::write(crates_file, content).unwrap();
     }
 }

@@ -32,9 +32,15 @@ use crate::server::file_server::{self, FileServer};
 
 pub fn cli() -> clap::Command {
     clap::Command::new("server")
-        .arg(arg!(-i --"ip" <VALUE> "spcify the ip address").value_parser(value_parser!(IpAddr)).default_value("127.0.0.1"))
         .arg(
-            arg!(-p --"port" <VALUE> "specify the listening port").value_parser(value_parser!(u16)).default_value("8000"),
+            arg!(-i --"ip" <VALUE> "specify the ip address")
+                .value_parser(value_parser!(IpAddr))
+                .default_value("127.0.0.1"),
+        )
+        .arg(
+            arg!(-p --"port" <VALUE> "specify the listening port")
+                .value_parser(value_parser!(u16))
+                .default_value("8000"),
         )
         .arg(
             arg!(-c --"cert-path" <VALUE> "Path to a TLS certificate file")

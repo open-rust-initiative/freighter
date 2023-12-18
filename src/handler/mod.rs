@@ -29,3 +29,15 @@ impl DownloadMode {
         }
     }
 }
+
+pub mod utils {
+
+    // the path rules of crates index file
+    pub fn index_suffix(name: &str) -> String {
+        match name.len() {
+            1..=2 => format!("{}/{}", name.len(), name),
+            3 => format!("{}/{}/{}", name.len(), &name[0..1], name),
+            _ => format!("{}/{}/{}", &name[0..2], &name[2..4], name),
+        }
+    }
+}

@@ -123,7 +123,7 @@ pub fn download_and_check_hash(
         let hex = format!("{:x}", result);
 
         //if need to calculate hash
-        if let Some(..) = check_sum {
+        if check_sum.is_some() {
             return if hex == check_sum.unwrap() {
                 tracing::info!("###[ALREADY] \t{:?}", file);
                 Ok(false)
@@ -145,7 +145,7 @@ pub fn download_and_check_hash(
 
 pub fn encode_huaweicloud_url(url: &mut Url) {
     if let Some(domain) = url.domain() {
-        if domain.contains("myhuaweicloud.com") && url.path().starts_with("/crates"){
+        if domain.contains("myhuaweicloud.com") && url.path().starts_with("/crates") {
             let mut path = PathBuf::from(url.path());
             let encode_path: String =
                 byte_serialize(path.file_name().unwrap().to_str().unwrap().as_bytes()).collect();

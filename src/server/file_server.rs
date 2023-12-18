@@ -32,6 +32,7 @@ pub struct FileServer {
 #[tokio::main]
 pub async fn start(config: &Config, file_server: &FileServer) {
     tracing_subscriber::fmt::init();
+    // storage::init().await;
     let routes = filters::build_route(config.to_owned())
         .recover(handlers::handle_rejection)
         .with(warp::trace::request());
@@ -68,9 +69,17 @@ pub async fn start(config: &Config, file_server: &FileServer) {
 mod filters {
     use std::path::PathBuf;
 
+    use bytes::{Buf, Bytes};
     use warp::{Filter, Rejection};
 
-    use crate::{config::Config, server::git_protocol::GitCommand};
+    use crate::{
+        config::Config,
+        server::{
+            file_server::utils,
+            git_protocol::GitCommand,
+            model::{CratesPublish, Errors, PublishRsp},
+        },
+    };
 
     use super::handlers;
 
@@ -86,8 +95,64 @@ mod filters {
         // GET /dist/... => ./dist/..
         dist(config.clone())
             .or(rustup(config.clone()))
-            .or(crates(config))
+            .or(crates(config.clone()))
             .or(git(git_work_dir))
+            .or(publish(config.clone()))
+            .or(sparse_index(config))
+    }
+
+    pub fn publish(
+        config: Config,
+    ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+        warp::path!("api" / "v1" / "crates" / "new")
+            .and(warp::body::bytes())
+            .and(with_config(config))
+            .map(|mut body: Bytes, config: Config| {
+                let json_len = utils::get_usize_from_bytes(body.copy_to_bytes(4));
+
+                tracing::info!("json_len: {:?}", json_len);
+                let json = body.copy_to_bytes(json_len);
+                tracing::info!("raw json: {:?}", json);
+
+                let parse_result = serde_json::from_slice::<CratesPublish>(json.as_ref());
+                let crate_len = utils::get_usize_from_bytes(body.copy_to_bytes(4));
+                let file_content = body.copy_to_bytes(crate_len);
+
+                match parse_result {
+                    Ok(result) => {
+                        println!("JSON: {:?}", result);
+                        let work_dir = config.work_dir.unwrap();
+                        utils::save_crate_index(
+                            &result,
+                            &file_content,
+                            work_dir.join("crates.io-index"),
+                        );
+                        utils::save_crate_file(&result, &file_content, work_dir.join("crates"));
+                        // let std::fs::write();
+                        // 1.verify name and version from local db
+                        // 2.call remote server to check info in crates.io
+                        warp::reply::json(&PublishRsp::default())
+                    }
+                    Err(err) => warp::reply::json(&Errors::new(err.to_string())),
+                }
+            })
+    }
+
+    pub fn sparse_index(
+        config: Config,
+    ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+        warp::path("index")
+            .and(warp::path::tail())
+            .and(with_config(config))
+            .and_then(|tail: warp::path::Tail, config: Config| async move {
+                handlers::return_files(
+                    config.rustup.serve_domains.unwrap(),
+                    config.work_dir.unwrap(),
+                    PathBuf::from("crates.io-index").join(tail.as_str()),
+                    false,
+                )
+                .await
+            })
     }
 
     // build '/dist/*' route, this route handle rust toolchian files request
@@ -368,5 +433,44 @@ mod handlers {
             return Err(FreighterError::code(resp.status().as_u16().into()));
         }
         Ok(())
+    }
+}
+
+mod utils {
+    use std::{fs, path::PathBuf};
+
+    use crate::{
+        handler::{crates_file::IndexFile, utils},
+        server::model::CratesPublish,
+    };
+    use bytes::Bytes;
+    use sha2::{Digest, Sha256};
+
+    pub fn get_usize_from_bytes(bytes: Bytes) -> usize {
+        let mut fixed_array = [0u8; 8];
+        fixed_array[..4].copy_from_slice(&bytes[..4]);
+        usize::from_le_bytes(fixed_array)
+    }
+
+    pub fn save_crate_index(json: &CratesPublish, content: &Bytes, work_dir: PathBuf) {
+        let suffix = utils::index_suffix(&json.name);
+        let index_path = work_dir.join(suffix);
+        //convert publish json to index file
+        let mut index_file: IndexFile =
+            serde_json::from_str(&serde_json::to_string(&json).unwrap()).unwrap();
+
+        let mut hasher = Sha256::new();
+        hasher.update(content);
+        index_file.cksum = Some(format!("{:x}", hasher.finalize()));
+        fs::write(index_path, serde_json::to_string(&index_file).unwrap()).unwrap();
+    }
+
+    pub fn save_crate_file(json: &CratesPublish, content: &Bytes, work_dir: PathBuf) {
+        let crates_dir = work_dir.join(&json.name);
+        if !crates_dir.exists() {
+            fs::create_dir_all(&crates_dir).unwrap();
+        }
+        let crates_file = crates_dir.join(format!("{}-{}.crate", json.name, json.vers));
+        fs::write(crates_file, content).unwrap();
     }
 }

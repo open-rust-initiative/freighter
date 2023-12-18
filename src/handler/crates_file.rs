@@ -28,7 +28,7 @@ use crate::errors::FreightResult;
 use crate::handler::index;
 
 use super::index::CrateIndex;
-use super::DownloadMode;
+use super::{utils, DownloadMode};
 
 /// CratesOptions preserve the sync subcommand config
 #[derive(Clone, Debug)]
@@ -84,22 +84,19 @@ impl Default for CratesOptions {
 impl CratesOptions {
     // the path rules of craes index file
     pub fn get_index_path(&self, name: &str) -> PathBuf {
-        let suffix = match name.len() {
-            1..=2 => format!("{}/{}", name.len(), name),
-            3 => format!("{}/{}/{}", name.len(), &name[0..1], name),
-            _ => format!("{}/{}/{}", &name[0..2], &name[2..4], name),
-        };
+        let suffix = utils::index_suffix(name);
         self.index.path.join(suffix)
     }
 }
 
 /// Crate preserve the crates info parse from registry json file
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Crate {
+pub struct IndexFile {
     pub name: String,
     pub vers: String,
     pub deps: Vec<Dependency>,
-    pub cksum: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cksum: Option<String>,
     pub features: BTreeMap<String, Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub features2: Option<BTreeMap<String, Vec<String>>>,
@@ -316,14 +313,15 @@ pub fn parse_index_and_download(
 
             for line in buffered.lines() {
                 let line = line.unwrap();
-                let c: Crate = serde_json::from_str(&line).unwrap();
+                let c: IndexFile = serde_json::from_str(&line).unwrap();
                 let err_record = Arc::clone(err_record);
                 let opts = opts.clone();
 
                 let url = Url::parse(&format!(
                     "{}/{}/{}-{}.crate",
                     opts.config.domain, &c.name, &c.name, &c.vers
-                )).unwrap();
+                ))
+                .unwrap();
 
                 let file = opts
                     .crates_path
@@ -352,7 +350,7 @@ pub fn download_crates_with_log(
     path: PathBuf,
     opts: &CratesOptions,
     url: Url,
-    c: Crate,
+    index_file: IndexFile,
     err_record: Arc<Mutex<File>>,
 ) -> FreightResult {
     let down_opts = &DownloadOptions {
@@ -361,7 +359,7 @@ pub fn download_crates_with_log(
         path,
     };
 
-    match download_and_check_hash(down_opts, Some(&c.cksum), false) {
+    match download_and_check_hash(down_opts, Some(&index_file.cksum.unwrap()), false) {
         Ok(download_succ) => {
             let path = &down_opts.path;
             if download_succ && opts.upload {
@@ -383,8 +381,8 @@ pub fn download_crates_with_log(
         Err(err) => {
             let mut err_file = err_record.lock().unwrap();
             let err_crate = ErrorCrate {
-                name: c.name,
-                vers: c.vers,
+                name: index_file.name,
+                vers: index_file.vers,
                 time: Utc::now().timestamp().to_string(),
             };
             let json = serde_json::to_string(&err_crate).unwrap();

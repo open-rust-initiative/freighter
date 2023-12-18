@@ -6,8 +6,8 @@
 //!
 
 use rayon::{ThreadPool, ThreadPoolBuilder};
-use url::Url;
 use std::{path::PathBuf, sync::Arc};
+use url::Url;
 
 use crate::{
     config::ProxyConfig,

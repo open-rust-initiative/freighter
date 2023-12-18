@@ -114,7 +114,7 @@ pub struct Errors {
 impl Errors {
     pub fn new(detail: String) -> Errors {
         Errors {
-            errors: vec![ErrorDetail { detail: detail }],
+            errors: vec![ErrorDetail { detail }],
         }
     }
 }

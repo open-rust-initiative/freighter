@@ -120,7 +120,6 @@ pub struct ErrorCrate {
 #[derive(Serialize, Deserialize, Debug, PartialEq, PartialOrd, Ord, Eq)]
 pub struct Dependency {
     pub name: String,
-    #[serde(rename = "version_req")]
     pub req: String,
     pub features: Vec<String>,
     pub optional: bool,

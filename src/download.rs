@@ -123,7 +123,7 @@ pub fn download_and_check_hash(
         let hex = format!("{:x}", result);
 
         //if need to calculate hash
-        if let Some(..) = check_sum {
+        if check_sum.is_some() {
             return if hex == check_sum.unwrap() {
                 tracing::info!("###[ALREADY] \t{:?}", file);
                 Ok(false)

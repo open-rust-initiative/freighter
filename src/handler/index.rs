@@ -62,9 +62,9 @@ impl Default for CrateIndex {
 ///
 impl CrateIndex {
     // use default branch master
-    const REMOTE_BRANCH: &str = "master";
+    const REMOTE_BRANCH: &'static str = "master";
     // use default name origin
-    const REMOTE_NAME: &str = "origin";
+    const REMOTE_NAME: &'static str = "origin";
     /// Create a new `CrateIndex` from a `Work dir`.
     pub fn new(domain: &str, work_dir: PathBuf) -> Self {
         Self {

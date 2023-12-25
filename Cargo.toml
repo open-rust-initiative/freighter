@@ -5,7 +5,6 @@ edition = "2021"
 license = "MIT"
 homepage = "https://github.com/open-rust-Initiative/freighter"
 repository = "https://github.com/open-rust-Initiative/freighter"
-documentation = ""
 description = "The Freighter's purpose is to help the community and company to build the proxy for crates.io and the registry for the development environment."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

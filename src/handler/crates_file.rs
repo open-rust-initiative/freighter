@@ -246,7 +246,7 @@ pub fn fix_download(opts: &CratesOptions) -> FreightResult {
                     tracing::info!("handle success: {}-{}", &name, &vers);
                 } else {
                     // skipping visited
-                    tracing::info!("skip different verion of same crates: {}-{}", &name, &vers);
+                    tracing::info!("skip different version of same crates: {}-{}", &name, &vers);
                 }
             }
         }
@@ -371,8 +371,8 @@ pub fn download_crates_with_log(
                         .replace(opts.crates_path.to_str().unwrap(), "")
                 );
                 tracing::info!("s3_path: {}, {}", s3_path, opts.delete_after_upload);
-                let uploded = s3.upload_file(path, &s3_path, &opts.bucket_name);
-                if uploded.is_ok() && opts.delete_after_upload {
+                let uploaded = s3.upload_file(path, &s3_path, &opts.bucket_name);
+                if uploaded.is_ok() && opts.delete_after_upload {
                     fs::remove_file(path).unwrap();
                 }
             }

@@ -22,7 +22,7 @@ pub struct GitCommand {}
 /// - [conduit-git-http-backend][<https://github.com/conduit-rust/conduit-git-http-backend/blob/master/src/lib.rs>].
 ///
 ///
-/// hanlde request from git client
+/// handle request from git client
 impl GitCommand {
     pub async fn git_info_refs(
         &self,

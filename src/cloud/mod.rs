@@ -25,7 +25,7 @@ pub trait CloudStorage {
     fn upload_folder(&self, folder: &str, bucket: &str) -> FreightResult;
 }
 
-// this method is used to handle 'uplaod' subcommand for uplaod all files to obs server
+// this method is used to handle 'upload' subcommand for upload all files to obs server
 pub fn upload_with_pool(
     path: PathBuf,
     thread_pool: Arc<ThreadPool>,

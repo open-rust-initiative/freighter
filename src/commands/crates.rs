@@ -32,7 +32,7 @@
 //!   Arguments:
 //!   - __init__: Whether to download all the crates files for initialization.
 //!   - __upload__: Whether to upload single file to s3 after download success.
-//!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param befor uplaod.
+//!   - __bucket__: set the s3 bucket you want to upload files to, you must provide this param before upload.
 //!   - __delete-after-upload__: This optional parameter will be used to delete files after upload.
 //!
 //! # upload subcommand
@@ -80,7 +80,7 @@ pub fn cli() -> clap::Command {
         )
         .subcommand(subcommand("download")
             .arg(flag("init", "Start init download of crates file, this will traverse all index for full download"))
-            .arg(flag("fix", "Hanlde the crates file that download failed, this opetion will traverse error log"))
+            .arg(flag("fix", "Handle the crates file that download failed, this opetion will traverse error log"))
             .arg(arg!(--"name" <VALUE> "only fix the crates you specified, this command will try to re-download the crates"))
             .arg(flag("upload", "upload every crate file after download"))
             .arg(arg!(-b --"bucket" <VALUE> "set the s3 bucket name you want to upload files"))

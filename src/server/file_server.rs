@@ -243,8 +243,8 @@ mod filters {
             .and(with_work_dir(git_work_dir.to_owned()))
             .and_then(
                 |_tail, method, body, content_type, _query, work_dir| async move {
-                    let git_protocal = GitCommand::default();
-                    git_protocal
+                    let git_protocol = GitCommand::default();
+                    git_protocol
                         .git_upload_pack(body, work_dir, method, content_type)
                         .await
                 },
@@ -254,8 +254,8 @@ mod filters {
             .and(warp::body::aggregate())
             .and(with_work_dir(git_work_dir))
             .and_then(|body, work_dir| async move {
-                let git_protocal = GitCommand::default();
-                git_protocal.git_info_refs(body, work_dir).await
+                let git_protocol = GitCommand::default();
+                git_protocol.git_info_refs(body, work_dir).await
             });
 
         warp::path("crates.io-index").and(git_upload_pack.or(git_info_refs))

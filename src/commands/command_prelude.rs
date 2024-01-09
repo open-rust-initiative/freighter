@@ -4,7 +4,7 @@
 //!
 //!
 use clap::Command;
-pub use clap::{value_parser, Arg, ArgAction, ArgMatches};
+pub use clap::{value_parser, Arg, ArgAction};
 
 /// Add a custom flag to subcommand
 pub fn flag(name: &'static str, help: &'static str) -> Arg {

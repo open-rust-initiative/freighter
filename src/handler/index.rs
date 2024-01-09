@@ -52,7 +52,7 @@ impl Default for CrateIndex {
         let home_path = dirs::home_dir().unwrap();
         CrateIndex {
             url: Url::parse("https://github.com/rust-lang/crates.io-index.git").unwrap(),
-            path: home_path.join("crates.io-index"),
+            path: home_path.join("freighter/crates.io-index"),
         }
     }
 }
@@ -66,9 +66,9 @@ impl CrateIndex {
     // use default name origin
     const REMOTE_NAME: &'static str = "origin";
     /// Create a new `CrateIndex` from a `Work dir`.
-    pub fn new(domain: &str, work_dir: PathBuf) -> Self {
+    pub fn new(domain: &str, path: PathBuf) -> Self {
         Self {
-            path: work_dir.join("crates.io-index"),
+            path,
             url: Url::parse(domain).unwrap(),
         }
     }
@@ -513,7 +513,7 @@ mod tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("data/tests/fixtures/");
 
-        let index =
+        let _ =
             super::CrateIndex::new("https://github.com/rust-lang/crates.io-index.git", path);
         // index.git_clone(&mut CratesOptions::default()).unwrap();
     }
@@ -523,7 +523,7 @@ mod tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("data/tests/fixtures/");
 
-        let index =
+        let _ =
             super::CrateIndex::new("https://github.com/rust-lang/crates.io-index.git", path);
     }
 }

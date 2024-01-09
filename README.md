@@ -22,7 +22,18 @@ Freighter's functionality mainly consists of four parts: synchronizing crates in
 
 Freighter can be executed as a standalone executable program. You can build it using the **cargo build --release** command and then copy it to your `/usr/local/bin directory`.
 
-#### 1. Synchronizing Crates Index and Crates
+#### 1. Prerequisite
+* Freighter defaults to storing data in the **default directory /Users/${USERNAME}/freighter**. To customize the storage directory, modify the config.toml file.
+* The config file can be obtained by executing any command; Freighter copies the config.default.toml file to the default directory.
+* Alternatively, the config file can be manually copied from the source code directory src which named **config.default.toml**.
+* Customize the storage path for data by modifying configurations like **log_path, index_path, crates_path**, etc., in the config file.
+* Freighter uses the config.toml configuration in the default directory for its operations. To use a custom config path, add the -c parameter when executing a command. For example:
+  ```bash
+  freighter -c /path/to/config.toml <subcommand>
+  ```
+    You can specify paths like /tmp/freighter/config.toml, /tmp/freighter, or /tmp, and Freighter will automatically interpret them as /tmp/freighter/config.toml.
+
+#### 2. Synchronizing Crates Index and Crates
 To sync crate files, Freighter needs to first sync the crates index. You can use the following command to sync the index file:
 
 ```bash
@@ -30,27 +41,22 @@ freighter crates pull
 ```
 
 This command will create a crates.io-index directory in the default path **/Users/${USERNAME}/freighter** and fetch the index. If the index already exists, it will attempt to update it. 
-You can also use the **-c** parameter to specify a **working directory** to change the storage location of the index and crates:
-
-```bash
-freighter -c /path/to/wokring_dir crates pull
-```
 
 **Full download**: Next, you can use the download command with the init parameter to download the full set of crates files:
 
 ```bash
-freighter -c /path/to/wokring_dir crates download --init
+freighter crates download --init
 ```
 
 **Incremental update**: Without the init parameter, Freighter will compare log records in the **working directory** to determine the index and crates that need incremental updates:
 
 ```bash
-freighter -c /path/to/wokring_dir crates download
+freighter crates download
 ```
 
-#### 2.Syncing the rustup-init Files
-#### 3.Syncing the Rust Toolchain Files
-#### 4.Http Server
+#### 3.Syncing the rustup-init Files
+#### 4.Syncing the Rust Toolchain Files
+#### 5.Http Server
 
 ### How to contribute?
 

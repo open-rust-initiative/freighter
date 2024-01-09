@@ -13,10 +13,10 @@
 //!   ```
 //!
 
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::str::FromStr;
 
-use clap::{arg, ArgMatches};
+use clap::{arg, crate_version, ArgMatches};
 use log4rs::append::console::ConsoleAppender;
 use log4rs::append::rolling_file::policy::compound::roll::delete::DeleteRoller;
 use log4rs::append::rolling_file::policy::compound::trigger::size::SizeTrigger;
@@ -28,7 +28,7 @@ use log4rs::config::{Appender, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use tracing::log::LevelFilter;
 
-use crate::commands;
+use crate::commands::{self};
 use crate::config::{Config, LogConfig};
 use crate::errors::{FreightResult, FreighterError};
 
@@ -47,11 +47,8 @@ pub fn main(config: &mut Config) -> FreightResult {
 
     let args = cli().try_get_matches().unwrap_or_else(|e| e.exit());
 
-    let root = match args.get_one::<String>("work-dir").cloned() {
-        Some(root) => PathBuf::from(root),
-        None => dirs::home_dir().unwrap(),
-    };
-    let mut config = config.load(&root);
+    let config_parent = args.get_one::<String>("config-path").cloned().map(PathBuf::from);
+    let mut config = config.load(config_parent);
 
     let (cmd, subcommand_args) = match args.subcommand() {
         Some((cmd, args)) => (cmd, args),
@@ -71,13 +68,12 @@ fn cli() -> App {
     let usage = "freighter [SUBCOMMAND]";
 
     App::new("freighter")
-        .version("0.1.0")
+        .version(crate_version!())
         .disable_colored_help(true)
         .disable_help_subcommand(true)
         .override_usage(usage)
         .author("Open Rust Initiative")
-        .arg(arg!(-c --"work-dir" <FILE> "specify the work dir,
-             where to download crates, rust toolchains and storage logs, default: $HOME/.freighter")
+        .arg(arg!(-c --"config-path" <FILE> "specify the config path, default: $HOME/freighter/config.toml")
         )
         .help_template(
             "\
@@ -107,9 +103,10 @@ pub fn execute_subcommand(config: &mut Config, cmd: &str, args: &ArgMatches) -> 
     }
 }
 /// read values(log format encoder, log limit and level) from config file
-/// and then initialize config for log4rs, log will preserve in /work_dir/log by default
-pub fn init_log(config: &LogConfig, work_dir: PathBuf, sub_command: &str) -> FreightResult {
-    let binding = work_dir.join(format!("log/{}.log", sub_command));
+/// and then initialize config for log4rs, log will preserve in /log_path/log by default
+pub fn init_log(config: &LogConfig, log_path: &Path, sub_command: &str) -> FreightResult {
+    // attach file name
+    let binding = log_path.join(format!("{}.log", sub_command));
     let log_path = binding.to_str().unwrap();
     let level = LevelFilter::from_str(&config.level).unwrap();
 

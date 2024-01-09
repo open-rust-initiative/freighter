@@ -147,13 +147,14 @@ async fn send(
 
     loop {
         let mut bytes_out = BytesMut::new();
-        git_output.read_buf(&mut bytes_out).await?;
+        let res = git_output.read_buf(&mut bytes_out).await;
+        tracing::info!("reading output :{:?}", res);
         if bytes_out.is_empty() {
-            println!("send:empty");
+            tracing::info!("send:empty");
             return Ok(());
         }
         if add_refs {
-            println!("send: bytes_out: {:?}", bytes_out.clone().freeze());
+            tracing::info!("send: bytes_out: {:?}", bytes_out.clone().freeze());
         }
         sender.send_data(bytes_out.freeze()).await.unwrap();
     }

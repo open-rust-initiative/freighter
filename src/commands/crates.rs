@@ -101,17 +101,17 @@ OPTIONS:
 {options}
 
 EXAMPLES
-1. Sync the crates index with specify directory
+1. Sync the crates index with specify config path
 
-       freighter -c /mnt/volume_fra1_01 crates pull
+       freighter -c /mnt/freighter/config.toml crates pull
 
 2. Download all crates file and unload:
 
        freighter crates download --init --upload --bucket crates
 
-3. Download crates file with multi-thread to specify directory:
+3. Download crates file with multi-thread:
 
-       freighter -c /mnt/volume_fra1_01 crates -t 32 download --init
+       freighter crates -t 32 download --init
 
 \n")
 }
@@ -120,20 +120,15 @@ EXAMPLES
 ///
 ///
 pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
-    let work_dir = config
-        .work_dir
-        .as_ref()
-        .expect("something bad happened because work_dir is none");
-
-    crate::cli::init_log(&config.log, work_dir.to_path_buf(), "crates").unwrap();
+    crate::cli::init_log(&config.log, &config.log_path, "crates").unwrap();
 
     let opts = &mut CratesOptions {
         config: config.crates.to_owned(),
         proxy: config.proxy.to_owned(),
-        index: CrateIndex::new(&config.crates.index_domain, work_dir.to_owned()),
+        index: CrateIndex::new(&config.crates.index_domain, config.index_path.to_owned()),
         no_progressbar: args.get_flag("no-progressbar"),
-        crates_path: work_dir.join("crates"),
-        log_path: work_dir.join("log"),
+        crates_path: config.crates_path.to_owned(),
+        log_path: config.log_path.to_owned(),
         ..Default::default()
     };
     let domain = args.get_one::<String>("domain").cloned();

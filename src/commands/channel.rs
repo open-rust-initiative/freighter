@@ -107,17 +107,12 @@ with 64 download threads and then clean historical files
 ///
 ///
 pub fn exec(config: &mut Config, args: &ArgMatches) -> FreightResult {
-    let work_dir = config
-        .work_dir
-        .as_ref()
-        .expect("something bad happened because work_dir is none");
-
-    crate::cli::init_log(&config.log, work_dir.to_path_buf(), "channel").unwrap();
+    crate::cli::init_log(&config.log, &config.log_path, "channel").unwrap();
 
     let mut opts = ChannelOptions {
         config: config.rustup.to_owned(),
         proxy: config.proxy.to_owned(),
-        dist_path: work_dir.join("dist"),
+        dist_path: config.dist_path.to_owned(),
         ..Default::default()
     };
 

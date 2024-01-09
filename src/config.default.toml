@@ -1,6 +1,9 @@
 
 
 [log]
+# The path which log file is saved
+log_path = ""
+
 # log format encoder, see https://docs.rs/log4rs/1.2.0/log4rs/append/file/struct.FileAppenderDeserializer.html#configuration
 # for more information
 encoder = "{d}:{l} - {m}{n}"
@@ -8,11 +11,17 @@ encoder = "{d}:{l} - {m}{n}"
 # log level
 level = "info"
 
-# will delete and regenerate log file if exceeded the limit, unit is MB
+# log file will be deleted and regenerated if exceeded the threshold, unit is MB
 limit = 100
 
 
 [crates]
+# The path which the crates index file is saved
+index_path = ""
+
+# The path which the crates file is saved
+crates_path = ""
+
 # download index from domain
 index_domain = "https://github.com/rust-lang/crates.io-index.git"
 
@@ -22,9 +31,8 @@ domain = "https://static.crates.io/crates"
 # Number of crates download threads
 download_threads = 16
 
-# A list of domains that provide service in order
-# localhost means read from filesystem
-# It is better to add s3 domain at the first line
+# When providing services, freighter will retrieve files from the specified location in the following sequence and 
+# return them to the requesting client. localhost means read from local filesystem
 serve_domains = [
     "https://rust-proxy.obs.cn-east-3.myhuaweicloud.com",
     # "localhost",
@@ -36,13 +44,19 @@ serve_domains = [
 serve_index = "/opt/rust/"
 
 [rustup]
-# download rustup from domain
+# The path which the rustup file is saved
+rustup_path = ""
+
+# The path which the rustup release sha file is saved
+dist_path = ""
+
+# which domain to download rustup from
 domain = "https://static.rust-lang.org"
 
 # Number of rust toolchain download threads
 download_threads = 16
 
-# stable versions that you want to sync with
+# released rust versions that you want to sync with
 sync_stable_versions = [
     "1.9",
     "1.10",
@@ -132,7 +146,15 @@ sync_stable_versions = [
     "1.68.1",
     "1.68.2",
     "1.69",
-    "1.70"
+    "1.70",
+    "1.71",
+    "1.71.1",
+    "1.72",
+    "1.72.1",
+    "1.73",
+    "1.74",
+    "1.74.1",
+    "1.75",
 ]
 
 # days you want to keep for historical nightly version
@@ -141,8 +163,8 @@ sync_nightly_days = 30
 # days you want to keep for historical beta version
 sync_beta_days = 30
 
-# A list of domains that provide service in order
-# localhost means read from filesystem
+# When providing services, freighter will retrieve files from the specified location in the following sequence and 
+# return them to the requesting client. localhost means read from local filesystem
 serve_domains = [
     "https://rust-proxy.obs.cn-east-3.myhuaweicloud.com",
     # "localhost",

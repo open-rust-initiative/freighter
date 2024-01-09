@@ -117,7 +117,7 @@ pub fn sync_rust_toolchain(opts: &ChannelOptions) -> FreightResult {
             let today = Utc::now().date_naive();
             if today >= start_date {
                 let duration_days = (today - start_date).num_days().try_into().unwrap();
-                for (_, day) in start_date.iter_days().take(duration_days).enumerate() {
+                for day in start_date.iter_days().take(duration_days) {
                     sync_channel(opts, &format!("beta-{}", day))?;
                     sync_channel(opts, &format!("nightly-{}", day))?;
                 }

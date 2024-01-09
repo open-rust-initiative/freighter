@@ -1,6 +1,6 @@
 [package]
 name = "freighter-registry"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "MIT"
 homepage = "https://github.com/open-rust-Initiative/freighter"
@@ -10,31 +10,31 @@ description = "The Freighter's purpose is to help the community and company to b
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.71"
-thiserror = "1.0.36"
-clap = "4.3.4"
+anyhow = "1.0.79"
+thiserror = "1.0.56"
+clap = {version = "4.4.13", features = ["cargo"]}
 git2 = "0.18.1"
 git2-curl = "0.19"
-url = "2.3.1"
-serde = { version = "1.0.164", features = ["derive"] }
-serde_json = "1.0.97"
-walkdir = "2.3.2"
+url = "2.5.0"
+serde = { version = "1.0.195", features = ["derive"] }
+serde_json = "1.0.111"
+walkdir = "2.4.0"
 reqwest = { version = "0.11.13", features = ["blocking"] }
-openssl = { version = "0.10.54", features = ["vendored"] }
-chrono = "0.4.26"
-sha2 = "0.10.7"
-dirs = "5.0.0"
+openssl = { version = "0.10.62", features = ["vendored"] }
+chrono = "0.4.31"
+sha2 = "0.10.8"
+dirs = "5.0.1"
 toml = "0.8.8"
 log4rs = {version = "1.2.0", features = ["toml_format"] }
-tokio = { version = "1.28.2", features = ["full"] }
-warp = { version = "0.3.3", features = ["tls"] }
-tokio-util = { version = "0.7.4", features = ["codec"] }
-tracing = "0.1"
-tracing-subscriber = "0.3.17"
-bytes = "1.1.0"
-async-trait = "0.1.64"
-tokio-test = "0.4.2"
-rayon = "1.7.0"
+tokio = { version = "1.35.1", features = ["macros", "process"] }
+warp = { version = "0.3.6", features = ["tls"] }
+tokio-util = { version = "0.7.10", features = ["codec"] }
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+bytes = "1.5.0"
+async-trait = "0.1.77"
+tokio-test = "0.4.3"
+rayon = "1.8.0"
 
 
 [dev-dependencies]

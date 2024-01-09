@@ -86,17 +86,11 @@ mod filters {
     pub fn build_route(
         config: Config,
     ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-        let git_work_dir = if let Some(path) = &config.crates.serve_index {
-            PathBuf::from(path)
-        } else {
-            config.work_dir.clone().unwrap()
-        };
-
         // GET /dist/... => ./dist/..
         dist(config.clone())
             .or(rustup(config.clone()))
             .or(crates(config.clone()))
-            .or(git(git_work_dir))
+            .or(git(config.clone()))
             .or(publish(config.clone()))
             .or(sparse_index(config))
     }
@@ -121,13 +115,12 @@ mod filters {
                 match parse_result {
                     Ok(result) => {
                         println!("JSON: {:?}", result);
-                        let work_dir = config.work_dir.unwrap();
                         utils::save_crate_index(
                             &result,
                             &file_content,
-                            work_dir.join("crates.io-index"),
+                            config.index_path,
                         );
-                        utils::save_crate_file(&result, &file_content, work_dir.join("crates"));
+                        utils::save_crate_file(&result, &file_content, config.crates_path);
                         // let std::fs::write();
                         // 1.verify name and version from local db
                         // 2.call remote server to check info in crates.io
@@ -147,7 +140,7 @@ mod filters {
             .and_then(|tail: warp::path::Tail, config: Config| async move {
                 handlers::return_files(
                     config.rustup.serve_domains.unwrap(),
-                    config.work_dir.unwrap(),
+                    config.index_path,
                     PathBuf::from("crates.io-index").join(tail.as_str()),
                     false,
                 )
@@ -165,7 +158,7 @@ mod filters {
             .and_then(|tail: warp::path::Tail, config: Config| async move {
                 handlers::return_files(
                     config.rustup.serve_domains.unwrap(),
-                    config.work_dir.unwrap(),
+                    config.dist_path,
                     PathBuf::from("dist").join(tail.as_str()),
                     false,
                 )
@@ -184,7 +177,7 @@ mod filters {
             .and_then(move |tail: warp::path::Tail, config: Config| async move {
                 handlers::return_files(
                     config.rustup.serve_domains.unwrap(),
-                    config.work_dir.unwrap(),
+                    config.rustup_path,
                     PathBuf::from("rustup").join(tail.as_str()),
                     false,
                 )
@@ -218,7 +211,7 @@ mod filters {
                     .join(format!("{}-{}.crate", name, version));
                 handlers::return_files(
                     config.crates.serve_domains.unwrap(),
-                    config.work_dir.unwrap(),
+                    config.crates_path,
                     file_path,
                     true,
                 )
@@ -229,8 +222,15 @@ mod filters {
 
     // build '/crate.io-index/(git protocol)' route, this route handle gti clone and git pull request
     pub fn git(
-        git_work_dir: PathBuf,
+        // git_work_dir: PathBuf,
+        config: Config,
     ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+        let git_work_dir = if let Some(path) = &config.crates.serve_index {
+            PathBuf::from(path)
+        } else {
+            config.index_path
+        };
+        
         let git_upload_pack = warp::path!("git-upload-pack")
             .and(warp::path::tail())
             .and(warp::method())
